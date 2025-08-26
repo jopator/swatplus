@@ -34,34 +34,60 @@
         !! set initial weir height to principal depth - m
         res_ob(ires)%weir_hgt = res_ob(ires)%pvol / (res_ob(ires)%psa * 10000.)
         
+        
+        !! set initial values for Hanazaki parameters   |Jose T 2025
+        !!! Non-irrigation
+        res_ob(ires)%I_mean               = 0.0
+        res_ob(ires)%S_ini                = MAX(res_ob(ires)%evol, res_ob(ires)%pvol)
+        res_ob(ires)%N_memory             = 2                                                   !For now it will be fixed to 2
+        allocate(res_ob(ires)%I_mon_past(12*res_ob(ires)%N_memory))
+        res_ob(ires)%I_mon_past           = 0.0                                                 !At the beggining of the simulation this is a 1D array of N*12 zeros
+        allocate(res_ob(ires)%daily_inflow_array(1))
+        res_ob(ires)%daily_inflow_array   = 0.0                                                 !Same as above, 1d array with zeros
+        res_ob(ires)%c_ratio              = 0.51                                       
+        
+        !!! Irrigation
+        res_ob(ires)%d_mean               = 0.0
+        allocate(res_ob(ires)%d_mon_past(12*res_ob(ires)%N_memory))                             !Same logic as for inflow arrays
+        res_ob(ires)%d_mon_past           = 0.0
+        allocate(res_ob(ires)%daily_demand_array(1))
+        res_ob(ires)%daily_demand_array   = 0.0      
+        res_ob(ires)%d_irrig_day          = 0.0
+        res_ob(ires)%irrig_track          = 0
         !! use br1 as lag - then compute actual br1 (no option to input actual br1)
         res_ob(ires)%lag_up = res_hyd(ires)%br1
         res_ob(ires)%lag_down = res_hyd(ires)%br2
         
         !! calculate shape parameters for surface area equation
         resdif = res_hyd(ires)%evol - res_hyd(ires)%pvol
-        if ((res_hyd(ires)%esa - res_hyd(ires)%psa) > 0. .and. resdif > 0.) then
-          lnvol = Log10(res_ob(ires)%evol) - Log10(res_ob(ires)%pvol)
-          if (lnvol > 1.e-4) then
-            res_ob(ires)%br2 = (Log10(res_ob(ires)%esa) - Log10(res_ob(ires)%psa)) / lnvol
-          else  
-            res_ob(ires)%br2 = (Log10(res_ob(ires)%esa) - Log10(res_ob(ires)%psa)) / 0.001
-          end if
-          if (res_ob(ires)%br2 > 0.9) then
-            res_ob(ires)%br2 = 0.9
-            res_ob(ires)%br1 = (res_ob(ires)%psa / res_ob(ires)%pvol) ** 0.9
-          else
-            res_ob(ires)%br1 = (res_ob(ires)%esa / res_ob(ires)%evol) ** res_ob(ires)%br2
-          end if  
-        else
-          res_ob(ires)%br2 = 0.9
-          if (res_ob(ires)%pvol > 1.e-6) then
-            res_ob(ires)%br1 = (res_ob(ires)%psa / res_ob(ires)%pvol) ** 0.9
-          else
-            res_ob(ires)%br1 = .1
-          end if
-        end if
         
+        !! Updating to simply calculate the area based on Bathymetric coefficients
+        
+        ! If the user does not provide specific br1 and br2 coefficients   |Jose 2025
+        if (res_ob(ires)%br2 == 0. .and. res_ob(ires)%br1 == 0.) then    
+            ! Normal procedure  
+            if ((res_hyd(ires)%esa - res_hyd(ires)%psa) > 0. .and. resdif > 0.) then
+                lnvol = Log10(res_ob(ires)%evol) - Log10(res_ob(ires)%pvol)
+                if (lnvol > 1.e-4) then
+                res_ob(ires)%br2 = (Log10(res_ob(ires)%esa) - Log10(res_ob(ires)%psa)) / lnvol
+                else  
+                res_ob(ires)%br2 = (Log10(res_ob(ires)%esa) - Log10(res_ob(ires)%psa)) / 0.001
+                end if
+                if (res_ob(ires)%br2 > 0.9) then
+                res_ob(ires)%br2 = 0.9
+                res_ob(ires)%br1 = (res_ob(ires)%psa / res_ob(ires)%pvol) ** 0.9
+                else
+                res_ob(ires)%br1 = (res_ob(ires)%esa / res_ob(ires)%evol) ** res_ob(ires)%br2
+                end if  
+            else
+                res_ob(ires)%br2 = 0.9
+                if (res_ob(ires)%pvol > 1.e-6) then
+                res_ob(ires)%br1 = (res_ob(ires)%psa / res_ob(ires)%pvol) ** 0.9
+                else
+                res_ob(ires)%br1 = .1
+                end if
+            end if
+        end if
       end do
       
       do ires = 1, sp_ob%res

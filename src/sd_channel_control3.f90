@@ -158,7 +158,7 @@
       if (bsn_cc%lapse == 1) call cli_lapse
       wst(iwst)%weat = w
       ht1%temp = 5.0 + 0.75 * wst(iwst)%weat%tave
-      wtemp = 5.0 + 0.75 * wst(iwst)%weat%tave
+      wtemp = max(0., 5.0 + 0.75 * wst(iwst)%weat%tave)
 
       if (sd_ch(ich)%msk%nsteps == 1) then
         ob(icmd)%tsin(1) = ht1%flo
@@ -423,7 +423,7 @@
       !! calculate stream temperature
       ob(icmd)%hd(1)%temp = 5. + .75 * wst(iwst)%weat%tave
       ht2%temp = 5. + .75 * wst(iwst)%weat%tave
-      ch_stor(isdch)%temp = 5. + .75 * wst(iwst)%weat%tave
+      ch_stor(isdch)%temp = max(0., 5.0 + 0.75 * wst(iwst)%weat%tave)
       
       !! set constituents for routing
       if (cs_db%num_pests > 0) then

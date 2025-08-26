@@ -25,8 +25,9 @@
       real :: weir_hgt = 0.
       real :: alpha_up = 0.
       real :: alpha_down = 0.
-
+      
       ht1 = ob(icmd)%hin    !! set incoming flow
+
       ht2 = resz            !! zero outgoing flow, sediment and nutrients
       hcs2 = hin_csz        !! zero outgoing constituents
 
@@ -54,8 +55,8 @@
           !! determine reservoir outflow
           irel = res_dat(idat)%release
           d_tbl => dtbl_res(irel)
-          pvol_m3 = 0.5 * res_ob(jres)%pvol
-          evol_m3 = 0.5 * res_ob(jres)%evol
+          pvol_m3 = res_ob(jres)%pvol                               ! Removed 0.50 * res_ob(jres)%pvol (I don't know why it was there) Jose T
+          evol_m3 = res_ob(jres)%evol                               ! Removed 0.50 * res_ob(jres)%pvol (I don't know why it was there) Jose T
           if (res_wat_d(jres)%area_ha > 1.e-6) then
             dep = wbody%flo / res_wat_d(jres)%area_ha / 10000.     !m = m3 / ha / 10000m2/ha
           else
@@ -116,7 +117,7 @@
 
         !! update surface area
         if (res(jres)%flo > 0.) then
-          res_wat_d(jres)%area_ha = res_ob(jres)%br1 * res(jres)%flo ** res_ob(jres)%br2
+          res_wat_d(jres)%area_ha = res_ob(jres)%br1 * res(jres)%flo ** res_ob(jres)%br2 
         else
           res_wat_d(jres)%area_ha = 0.
         end if
