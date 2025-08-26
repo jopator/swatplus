@@ -36,6 +36,7 @@
       use salt_module !rtb salt
       use cs_module !rtb cs
       use gwflow_module !rtb gwflow
+	    use tillage_data_module
       !use basin_module, only : bsn_cc
       
       implicit none
@@ -362,6 +363,7 @@
 
         !! compute residue decomposition and nitrogen and phosphorus mineralization
         if (bsn_cc%cswat == 2) then
+          if (bmix_eff > 1.e-6) call mgt_newtillmix (ihru, bmix_eff, 0)
           call cbn_rsd_decomp      ! added by JC and FG, modified from nut_minrln.f90
           call cbn_zhang2
         end if
@@ -821,6 +823,9 @@
       ! output_plantweather
         hpw_d(j)%lai = pcom(j)%lai_sum
         hpw_d(j)%bioms = pl_mass(j)%tot_com%m
+        if (pl_mass(j)%tot_com%m < 0.) then
+          pl_mass(j)%tot_com%m = 0.
+        end if
         hpw_d(j)%residue = soil1(j)%rsd(1)%m
         hpw_d(j)%yield = pl_yield%m
         pl_yield = plt_mass_z

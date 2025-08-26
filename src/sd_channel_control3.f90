@@ -120,7 +120,8 @@
       ht1 = ob(icmd)%hin
       
       !! zero outgoing flow and sediment - ht2
-      ht2 = hz 
+      ht2 = hz
+      obcs(icmd)%hd(:) = hin_csz
       
       !! zero daily in/out morphology and sediment budget output
       ch_sed_bud(ich) = ch_sed_budz
@@ -159,6 +160,10 @@
       ht1%temp = 5.0 + 0.75 * wst(iwst)%weat%tave
       wtemp = max(0., 5.0 + 0.75 * wst(iwst)%weat%tave)
 
+      if (sd_ch(ich)%msk%nsteps == 1) then
+        ob(icmd)%tsin(1) = ht1%flo
+      end if
+            
       !! if connected to aquifer - add flow
       if (sd_ch(ich)%aqu_link > 0) then
         iaq = sd_ch(ich)%aqu_link

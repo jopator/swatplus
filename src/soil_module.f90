@@ -30,9 +30,10 @@
       
       type soil_physical_properties
         real :: d = 0.              !! mm           ! depth to bottom of soil layer
-        real :: thick = 0.          !! mm           ! thichness of soil layer
+        real :: thick = 0.          !! mm           ! thickness of soil layer
         real :: bd = 0.             !! Mg/m**3      ! bulk density of the soil
         real :: k = 0.              !! mm/hr        ! saturated hydraulic conductivity of soil layer. Index:(layer,HRU)
+        real :: cbn = 0.            !! mm/hr        ! percent organic carbon of soil layer
         real :: clay = 0.           !! none         ! fraction clay content in soil material (UNIT CHANGE!)
         real :: silt = 0.           !! %            ! percent silt content in soil material
         real :: sand = 0.           !! none         ! fraction of sand in soil material
@@ -51,6 +52,14 @@
         real :: wpmm = 0.           !! mm H20       ! water content of soil at -1.5 MPa (wilting point)
       end type soil_physical_properties
       type (soil_physical_properties),dimension (:), allocatable:: phys1
+
+      type soil_carbon_test
+        character(len=16) :: snam = ""     !! NA            soil series name  
+        real :: d = 0.              !! mm           ! depth in mm of soil carbon test
+        real :: cbn = 0.            !! mm/hr        ! percent organic carbon from soil test
+      end type soil_carbon_test
+      type (soil_carbon_test), dimension(:), allocatable :: sol_cbn_test
+      integer :: nmbr_cbn_tests = 0 !! none         |number of soil carbon tests 
 
       type soil_profile
         character(len=16) :: snam = ""     !! NA            soil series name  

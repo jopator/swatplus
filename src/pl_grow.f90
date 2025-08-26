@@ -7,6 +7,7 @@
       use carbon_module
       use organic_mineral_mass_module
       use time_module
+      use output_landscape_module
       
       implicit none 
       
@@ -17,16 +18,22 @@
         
       call pl_nut_demand
 
+      hpw_d(j)%bm_grow = 0.0
+      hpw_d(j)%c_gro = 0.0
+
       do ipl = 1, pcom(j)%npl
         !! zero biomass increase and nutrient uptake
         pl_mass_up = plt_mass_z
         
         !! check for start and end of dormancy of temp-based growth plant
-        idp = pcom(j)%plcur(ipl)%idplt
-        if (pldb(idp)%trig == "temp_gro") then
-          call pl_dormant
+        if (pcom(j)%plcur(ipl)%gro == "y") then
+            idp = pcom(j)%plcur(ipl)%idplt
+            if (pldb(idp)%trig == "temp_gro") then
+              call pl_dormant
+            end if
         end if
        
+        
         !! plant will not undergo stress if dormant
         if (pcom(j)%plcur(ipl)%idorm == "n" .and. pcom(j)%plcur(ipl)%gro == "y") then
 

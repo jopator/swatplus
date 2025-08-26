@@ -245,6 +245,9 @@
               
             end select
                   
+            ! add irrigation to yearly sum for dtbl conditioning jga 6-25
+            hru(j)%irr_yr = hru(j)%irr_yr + irrig(j)%applied
+            
             if (pco%mgtout == "y") then
               write (2612, *) j, time%yrc, time%mo, time%day_mo, d_tbl%act(iac)%name, "IRRIGATE", phubase(j),  &
                   pcom(j)%plcur(ipl)%phuacc, soil(j)%sw, pl_mass(j)%tot(ipl)%m, soil1(j)%rsd(1)%m, &
@@ -284,6 +287,31 @@
                     soil1(j)%rsd(1)%m, sol_sumno3(j), sol_sumsolp(j), frt_kg, fertno3, fertnh3,         &
                     fertorgn, fertsolp, fertorgp
                 endif
+              endif
+              pcom(j)%dtbl(idtbl)%num_actions(iac) = pcom(j)%dtbl(idtbl)%num_actions(iac) + 1
+              pcom(j)%dtbl(idtbl)%days_act(iac) = 1     !reset days since last action
+              if (iac > 1) pcom(j)%dtbl(idtbl)%days_act(iac-1) =  0     !reset previous action day counter
+            end if
+
+          !manure application
+          case ("manure")
+            j = d_tbl%act(iac)%ob_num
+            if (j == 0) j = ob_cur
+            
+            if (pcom(j)%dtbl(idtbl)%num_actions(iac) <= Int(d_tbl%act(iac)%const2)) then
+              ipl = 1
+              ifrt = d_tbl%act_typ(iac)               !fertilizer type from fert data base
+              frt_kg = d_tbl%act(iac)%const           !amount applied in kg/ha
+              ifertop = d_tbl%act_app(iac)            !surface application fraction from chem app data base
+
+              call pl_manure (ifrt, frt_kg, ifertop)
+              call salt_fert(j,ifrt,frt_kg,ifertop) !rtb salt 
+              call cs_fert(j,ifrt,frt_kg,ifertop) !rtb cs
+              if (pco%mgtout == "y") then
+                write (2612,*) j, time%yrc, time%mo, time%day_mo, mgt%op_char, " MANURE ", &
+                  phubase(j), pcom(j)%plcur(ipl)%phuacc, soil(j)%sw, pl_mass(j)%tot(ipl)%m,           &
+                  soil1(j)%rsd(1)%m, sol_sumno3(j), sol_sumsolp(j), frt_kg, fertno3, fertnh3,         &
+                  fertorgn, fertsolp, fertorgp
               endif
               pcom(j)%dtbl(idtbl)%num_actions(iac) = pcom(j)%dtbl(idtbl)%num_actions(iac) + 1
               pcom(j)%dtbl(idtbl)%days_act(iac) = 1     !reset days since last action
@@ -447,7 +475,7 @@
                         pcom(j)%plstr(ipl)%sum_a
                   end if 
                 end if
-                pcom(j)%plcur(ipl)%phuacc = 0.
+                !pcom(j)%plcur(ipl)%phuacc = 0.
               end do
               pcom(j)%dtbl(idtbl)%num_actions(iac) = pcom(j)%dtbl(idtbl)%num_actions(iac) + 1
               pcom(j)%dtbl(idtbl)%days_act(iac) = 1     !reset days since last action
@@ -1062,11 +1090,14 @@
             if (j == 0) j = ob_cur
             
             if (pcom(j)%dtbl(idtbl)%num_actions(iac) <= Int(d_tbl%act(iac)%const2)) then
-              iburn = d_tbl%act_typ(iac)           !burn type from fire data base
+              iburn = d_tbl%act_typ(iac)           !burn type
               do ipl = 1, pcom(j)%npl
                 call pl_burnop (j, iburn)
               end do
                         
+
+              ! reset plant index for output after burn operation
+              ipl = 1
               if (pco%mgtout == "y") then
                 write (2612, *) j, time%yrc, time%mo, time%day_mo, d_tbl%act(iac)%name, "    BURN", phubase(j),    &
                     pcom(j)%plcur(ipl)%phuacc, soil(j)%sw,pl_mass(j)%tot(ipl)%m, soil1(j)%rsd(1)%m,   &
@@ -1084,13 +1115,13 @@
             if (pcom(j)%dtbl(idtbl)%num_actions(iac) <= Int(d_tbl%act(iac)%const2)) then
               cn2(j) = chg_par (cn2(j), d_tbl%act(iac)%option, d_tbl%act(iac)%const, 35., 95.)
               call curno (cn2(j), j)
-            end if
+              if (pco%mgtout == "y") then
+                ipl = 1
+                write (2612, *) j, time%yrc, time%mo, time%day_mo, d_tbl%act(iac)%name, "    CNUP", phubase(j),    &
+                  pcom(j)%plcur(ipl)%phuacc, soil(j)%sw, pl_mass(j)%tot(ipl)%m, soil1(j)%rsd(1)%m,       &
+                  sol_sumno3(j), sol_sumsolp(j), cn_prev, cn2(j)
+              end if
             
-            if (pco%mgtout == "y") then
-              ipl = 1
-              write (2612, *) j, time%yrc, time%mo, time%day_mo, d_tbl%act(iac)%name, "    CNUP", phubase(j),    &
-                pcom(j)%plcur(ipl)%phuacc, soil(j)%sw, pl_mass(j)%tot(ipl)%m, soil1(j)%rsd(1)%m,       &
-                sol_sumno3(j), sol_sumsolp(j), cn_prev, cn2(j)
             end if
             
             pcom(j)%dtbl(idtbl)%num_actions(iac) = pcom(j)%dtbl(idtbl)%num_actions(iac) + 1
