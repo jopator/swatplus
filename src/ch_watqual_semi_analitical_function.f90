@@ -44,8 +44,10 @@
 
       help1 = 1. / tres - prock
       help2 = exp_w(-tdel * help1)
+
       help3 = cint / tres + term_m
       help4 = help3 / help1
+
       term1 = cprev * help2
       term2 = help4 * (1. - help2)
       yy = term1 + term2

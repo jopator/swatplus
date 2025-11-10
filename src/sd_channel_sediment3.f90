@@ -57,7 +57,6 @@
       real :: v_vc = 0.
       real :: m_exhaust = 0.
       real :: dur_scale = 0.
-      !!
 
       ich = isdch
       iob = sp_ob1%chandeg + jrch - 1
@@ -182,7 +181,6 @@
       b_exp = min (3.5, b_exp)
       if (vel_rch > vel_cr) then
         !! bank erosion m/yr
-
         dur_scale = 0.0001 * (ob(icmd)%area_ha / 100.) ** (-0.0858)
         v_vc = dur_scale * sd_ch(ich)%chw * (1. / (1. + exp_w(-4. * (vel_rch / vel_cr - 1.))))
         m_exhaust = 0.0002 * sd_ch(ich)%chw

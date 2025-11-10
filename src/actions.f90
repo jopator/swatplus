@@ -92,7 +92,7 @@
       real :: stor_m3 = 0.
       character(len=1) :: action = ""      !         |
       character(len=40) :: lu_prev = ""    !         |
-
+      
       do iac = 1, d_tbl%acts
         action = "n"
         do ial = 1, d_tbl%alts
@@ -162,11 +162,23 @@
                 end if
               end if
             endif
+            
+          ! Jose 2025 - add for recording reservoir irrigation demand (future plan is to fully integrate in water allocation module)
+          case ("res_irr_dmd")
+            ipl = 1
+            j = ob_cur                      ! hru number
 
+            !select object type
+            iob = d_tbl%act(iac)%ob_num
+            
+            irrig(j)%demand         = d_tbl%act(iac)%const * hru(j)%area_ha * 10.       ! m3 = mm * ha * 10.
+            res_ob(iob)%irrig_track = res_ob(iob)%irrig_track + 1                       ! Tracker to update irrigation demand
+            res_ob(iob)%d_irrig_day = irrig(j)%demand
+            
           !irrigate - hru action
           case ("irrigate")
             ipl = 1
-            j = ob_cur                      ! hru number 
+            j = ob_cur                      ! hru number
             
             !! check number of applications per year
             if (pcom(j)%dtbl(idtbl)%num_actions(iac) <= Int(d_tbl%act(iac)%const2)) then
@@ -221,10 +233,10 @@
               rto = amax1 (0., rto)
               rto = amin1 (1., rto)
               rto1 = (1. - rto)
-              irrig(j)%water = rto * ch_stor(iob)                       ! organics in irrigation water
-              ch_stor(iob) = rto1 * ch_stor(iob)                        ! remainder stays in channel
-              cs_irr(iob) = rto * ch_water(iob)                         ! constituents in irrigation water
-              ch_water(iob) = rto1 * ch_water(iob)                      ! remainder stays in channel
+              irrig(j)%water  = rto * ch_stor(iob)                       ! organics in irrigation water
+              ch_stor(iob)    = rto1 * ch_stor(iob)                      ! remainder stays in channel
+              ! cs_irr(iob)     = rto * ch_water(iob)                      ! constituents in irrigation water
+              ! ch_water(iob)   = rto1 * ch_water(iob)                     ! remainder stays in channel
               
             case ("res")
               if (res(iob)%flo > irrig(j)%demand) then
@@ -240,8 +252,8 @@
               rto1 = (1. - rto)
               irrig(j)%water = rto * res(iob)                           ! organics in irrigation water
               res(iob) = rto1 * res(iob)                                ! remainder stays in reservoir
-              !cs_irr(iob) = rto * res_water(iob)                        ! constituents in irrigation water
-              !res_water(iob) = rto1 * res_water(iob)                    ! remainder stays in reservoir
+              !cs_irr(iob) = rto * res_water(iob)                       ! constituents in irrigation water
+              !res_water(iob) = rto1 * res_water(iob)                   ! remainder stays in reservoir
               
             end select
                   

@@ -61,9 +61,10 @@
 
         ! empirical solution for x when y is known and y=x/(x+exp(m1-m2*x)) 
         if (yy > 0.01) then
+
          xx1 = yy ** exp_w(-0.13 + 1.06 * yy)
-         ! xx2 = exp_w(0.64 + 0.64 * yy ** 100.)   ! This causes an arithmatic error that is ignored by intel but not by gfortran
-         xx2 = exp_w(0.64 + 0.64 * yy ** 10.)
+         xx2 = exp_w(0.64 + 0.64 * yy ** 100.)   ! This causes an arithmatic error that is ignored by intel but not by gfortran
+
          xx = xx1 * xx2
         end if
 
