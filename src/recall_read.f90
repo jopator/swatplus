@@ -1,0 +1,309 @@
+  subroutine recalldb_read
+
+      use water_allocation_module
+      use maximum_data_module
+      use recall_module
+      use hydrograph_module
+      
+      implicit none
+      
+      character (len=80) :: titldum = ""
+      character (len=80) :: header = ""
+      integer :: eof = 0
+      integer :: imax = 0
+      integer :: i = 0
+      integer :: ii = 0
+      integer :: k = 0
+      integer :: iom = 0
+      logical :: i_exist              !none       |check to determine if file exists
+      
+      !read all recall files
+      inquire (file="recall_db.rec", exist=i_exist)
+      if (i_exist .or. "recall_db.rec" /= "null") then
+      do
+        open (107,file="recall_db.rec")
+        read (107,*,iostat=eof) titldum
+        if (eof < 0) exit
+        read (107,*,iostat=eof) header
+        if (eof < 0) exit
+        imax = 0
+          do while (eof == 0)
+            read (107,*,iostat=eof) i
+            if (eof < 0) exit
+            imax = Max(imax,i) 
+          end do
+          db_mx%recalldb_max = imax
+          
+      allocate (recall_db(0:imax))          
+      allocate (recall(0:imax))
+      allocate (rec_d(imax))
+      allocate (rec_m(imax))
+      allocate (rec_y(imax))
+      allocate (rec_a(imax))
+      
+      rewind (107)
+      read (107,*,iostat=eof) titldum
+      if (eof < 0) exit
+      read (107,*,iostat=eof) header
+      if (eof < 0) exit
+      
+      do ii = 1, imax
+        read (107,*,iostat=eof) i
+        if (eof < 0) exit
+        backspace (107)
+        read (107,*,iostat = eof) k, recall_db(i)%name, recall_db(i)%org_min,  &
+                                     recall_db(i)%pest, recall_db(i)%path,     &
+                                     recall_db(i)%hmet, recall_db(i)%salt,     &
+                                     recall_db(i)%constit
+        if (eof < 0) exit
+                  
+        !! read all organic mineral files
+        call recall_read (i)
+      end do
+      
+    end do
+    end if
+    close (107)
+      
+    end subroutine recalldb_read
+    
+
+    subroutine recall_read (irec)
+
+      use hydrograph_module
+      use input_file_module
+      use organic_mineral_mass_module
+      use constituent_mass_module
+      use maximum_data_module
+      use time_module
+      use exco_module
+      use recall_module
+      
+      implicit none    
+      
+      external :: search
+      
+      integer, intent(in) :: irec
+      character (len=80) :: titldum = ""!           |title of file
+      character (len=80) :: header = "" !           |header of file
+      character(len=16) :: ob_name = ""
+      character(len=8) :: ob_typ = ""
+      integer :: imax = 0             !none       |end of loop
+      integer :: iyr = 0              !           |
+      integer :: jday = 0             !           |
+      integer :: mo = 0               !           |
+      integer :: day_mo = 0           !           |
+      integer :: eof = 0              !           |end of file
+      logical :: i_exist              !none       |check to determine if file exists
+      integer :: nbyr = 0             !none       !number of years the land use occurred 
+      integer :: k = 0                !           |
+      integer :: iyrs = 0             !           | 
+      integer :: iyr_prev = 0         !none       |previous year
+      integer :: istep = 0            !           | 
+      integer :: ipestcom_db = 0      !none       !pointer to pestcom_db - fix*** ?? 
+      integer :: ipc = 0              !none       |counter
+      integer :: i = 0                !none       |counter
+      integer :: ii = 0               !none       |counter
+      integer :: iexco_om = 0
+      integer :: iexo_allo = 0
+      integer :: idaystep = 0
+      integer :: jday1 = 0
+      integer :: mo1 = 0
+      integer :: iyr1 = 0
+      integer :: iprev
+      
+      eof = 0
+      imax = 0
+      istep = 0
+      idaystep = 0
+
+      do 
+        open (108,file = recall_db(irec)%org_min%name)
+        read (108,*,iostat=eof) titldum
+        if (eof < 0) exit
+        read (108,*,iostat=eof) nbyr
+        if (eof < 0) exit
+        read (108,*,iostat=eof) header
+        exit 
+      end do
+        
+      !! check if the org mineral has already been used in a previous recall object
+      do iprev = 1, irec
+        if (recall_db(irec)%org_min%name == recall_db(irec)%org_min%name) then
+          recall_db(irec)%iorg_min = iprev
+          exit
+        end if
+      end do
+          
+      !! if new org mineral, then read
+      if (recall_db(irec)%iorg_min == irec) then
+                
+        select case (recall_db(irec)%org_min%tstep)
+            
+          case ("sub") !! subdaily
+            allocate (recall(irec)%hyd_flo(time%step*366,time%nbyr), source = 0.)
+            allocate (recall(irec)%hd(366,time%nbyr))
+            
+          case ("day") !! daily
+            allocate (recall(irec)%hd(366,time%nbyr))
+            
+          case ("mo") !! monthly
+            allocate (recall(irec)%hd(12,time%nbyr))
+            
+          case ("yr") !! yearly
+            allocate (recall(irec)%hd(1,time%nbyr))
+
+        end select 
+        
+        !! save starting year of recall data
+        read (108,*,iostat=eof) jday, mo, day_mo, iyr
+        recall(irec)%start_yr = iyr
+        backspace (108)
+        
+        !! set start year if recall starts before start of simulation
+        if (recall(irec)%start_yr <= time%yrc) then
+          iyrs = 1
+          do
+            read (108,*,iostat=eof) jday, mo, day_mo, iyr
+            if (iyr == time%yrc)  then
+              exit
+            end if
+          end do
+          backspace (108)
+        else
+          !! seet star year if recall starts after start of  simulation
+          iyrs = recall(irec)%start_yr - time%yrc + 1
+        end if
+        
+        !! read and store data
+        do 
+          iyr1 = iyr
+          read (108,*,iostat=eof) jday1, mo1, day_mo, iyr
+          if (eof < 0) exit
+          if (iyr > time%yrc_end) exit
+          backspace (108)
+          
+            !! increment iyrs (sequential year of recall data) if next year
+            if (iyr1 /= iyr) then
+              iyrs = iyrs + 1
+            end if
+            iyr1 = iyr
+          
+          !! read data for each time step
+          select case (recall_db(irec)%org_min%tstep)
+            case ("sub") !! subdaily
+              !! convert m3/s -> m3
+              recall(irec)%hyd_flo(istep,iyrs) = ht1%flo * 86400. / time%step
+              
+              !! reset daily step and sum the daily hyd
+              if (istep > idaystep * time%step) then
+                !! convert daily flow m3/s -> m3 -- other subdaily inputs are in t and kg
+                !recall(i)%hd(idaystep,iyrs)%flo = recall(i)%hd(idaystep,iyrs)%flo * 86400. / time%step
+                idaystep = idaystep + 1
+                recall(irec)%hd(idaystep,iyrs) = recall(irec)%hd(idaystep,iyrs) + ht1
+              else
+                recall(irec)%hd(idaystep,iyrs) = recall(irec)%hd(idaystep,iyrs) + ht1
+              end if
+           
+            case ("day") !! daily
+              read (108,*,iostat=eof) jday, mo, day_mo, iyr, ob_typ, ob_name,    &
+                                                      recall(irec)%hd(jday1,iyrs)
+            case ("mo") !! monthly
+              read (108,*,iostat=eof) jday, mo, day_mo, iyr, ob_typ, ob_name,    &
+                                                      recall(irec)%hd(mo1,iyrs)
+              write (10108,*) jday, mo, day_mo, iyr, ob_typ, ob_name,    &
+                                                      recall(irec)%hd(mo1,iyrs)
+            case ("yr") !! yearly
+              read (108,*,iostat=eof) jday, mo, day_mo, iyr, ob_typ, ob_name, ht1
+              recall(irec)%hd(1,iyrs) = ht1
+            end select
+            
+        end do    !! read and store data
+        
+        !! save end year of recall data
+        recall(i)%end_yr = iyr
+        close (108)
+        
+      end if    !! if new org mineral, then read
+      
+      !read all rec_pest files
+      inquire (file="pest.com", exist=i_exist)
+      if (i_exist ) then
+      do
+        open (107,file="pest.com")
+        read (107,*,iostat=eof) titldum
+        if (eof < 0) exit
+        read (107,*,iostat=eof) header
+        if (eof < 0) exit
+        imax = 0
+          do while (eof == 0)
+            read (107,*,iostat=eof) i
+            if (eof < 0) exit
+            imax = Max(imax,i) 
+          end do
+          
+      allocate (rec_pest(0:imax))
+      rewind (107)
+      read (107,*,iostat=eof) titldum
+      if (eof < 0) exit
+      read (107,*,iostat=eof) header
+      if (eof < 0) exit
+      
+      do ipc = 1, db_mx%pestcom
+        read (107,*,iostat=eof) ipestcom_db   !pointer to pestcom_db - fix***
+        if (eof < 0) exit
+
+         do ii = 1, imax
+           read (107,*,iostat=eof) i
+           if (eof < 0) exit
+           backspace (107)
+           read (107,*,iostat = eof) k, rec_pest(i)%name, rec_pest(i)%typ, rec_pest(i)%filename
+           if (eof < 0) exit
+           open (108,file = rec_pest(i)%filename)
+           read (108,*,iostat=eof) titldum
+           if (eof < 0) exit
+           read (108,*,iostat=eof) nbyr
+           if (eof < 0) exit
+           read (108,*,iostat=eof) header
+           if (eof < 0) exit
+        
+        select case (rec_pest(i)%typ)
+           case (1) !! daily
+            allocate (rec_pest(i)%hd_pest(366,nbyr))
+            
+           case (2) !! monthly
+            allocate (rec_pest(i)%hd_pest(12,nbyr))
+            
+           case (3) !! annual
+            allocate (rec_pest(i)%hd_pest(1,nbyr))
+        end select
+           
+        ! read and store entire year
+       do 
+         read (108,*,iostat=eof) iyr, istep
+         if (eof < 0) exit
+         if (iyr == time%yrc) exit
+       end do
+       
+       backspace (108)
+       iyr_prev = iyr
+       iyrs = 1
+       
+       do 
+         read (108,*,iostat=eof) iyr, istep, recall(i)%hd(istep,iyrs)
+         if (eof < 0) exit
+         !call hyd_convert_mass (recall(i)%hd(istep,iyrs))
+         if (iyr /= iyr_prev) then
+           iyr_prev = iyr
+           iyrs = iyrs + 1
+         endif
+       end do
+       close (108)
+         end do 
+        end do
+        close (107)
+      end do
+      end if     
+      
+      return
+      end subroutine recall_read

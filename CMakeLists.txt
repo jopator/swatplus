@@ -1,0 +1,273 @@
+# SWAT+ cmake, req min v3.20 (ifx, etc. support)
+###############################################################
+if("${CMAKE_SOURCE_DIR}" STREQUAL "${CMAKE_BINARY_DIR}" OR
+   "${CMAKE_SOURCE_DIR}/src" STREQUAL "${CMAKE_BINARY_DIR}")
+   message(FATAL_ERROR "'in-source' builds not permitted, e.g. use 'cmake -B build' instead.")
+endif()
+
+cmake_minimum_required(VERSION 3.22)
+
+# Query the host system information
+cmake_host_system_information(RESULT os_id QUERY DISTRIB_ID)
+cmake_host_system_information(RESULT os_version QUERY DISTRIB_RELEASE)
+cmake_host_system_information(RESULT os_like QUERY DISTRIB_ID_LIKE)
+cmake_host_system_information(RESULT pretty_name QUERY DISTRIB_PRETTY_NAME)
+
+project(swatplus VERSION 0.2 LANGUAGES Fortran)
+
+include(CTest)
+
+if(NOT TAG)
+    find_package(Git REQUIRED)
+    execute_process(
+      COMMAND ${GIT_EXECUTABLE} describe --tags
+      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+      OUTPUT_VARIABLE TAG
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+
+    if(TAG STREQUAL "")
+    # message(FATAL_ERROR "No tag info found.")
+    # this happens when git is not installed or not in the path
+      set(TAG "unknown")
+    endif()
+endif()
+
+
+if (UNIX)
+    if(CMAKE_Fortran_COMPILER_ID STREQUAL Intel)
+        set(fdialect        "-fpp -free -fpe0 -traceback -diag-disable=10448")
+        set(fdebug          "-warn all")
+        set(frelease        "-O")
+        set(FFC             "ifo")
+        if(NOT ENABLE_NETCDF)
+            link_libraries("-static")
+        endif()
+    elseif(CMAKE_Fortran_COMPILER_ID STREQUAL IntelLLVM)
+        set(fdialect        "-fpp -free -fpe0 -traceback")
+        set(fdebug          "-warn all -O0 -check bounds")
+        set(frelease        "-O")
+        set(FFC             "ifx")
+        if(NOT ENABLE_NETCDF)
+            link_libraries("-static")
+        endif()
+    elseif(CMAKE_Fortran_COMPILER_ID MATCHES GNU)
+        set(fdialect        "-cpp -fcheck=all -ffpe-trap=invalid,zero,overflow,underflow -fimplicit-none -ffree-line-length-none -fbacktrace -finit-local-zero -fno-unsafe-math-optimizations -frounding-math -fsignaling-nans")
+        set(fdebug          "-Wall")
+        set(frelease        "-O")
+        set(FFC             "gnu")
+        
+        if(NOT APPLE)
+            # Check if the OS is not Arch Linux or is not based on Arch Linux and is not Fedpra based
+            # For non-Arch and non-FedoraLinux based systems using gfortran (GNU), set the link_library static flag to build a static executable.")
+            # For Arch Linux based and Fedora based systems using gfortran, omit the link_library static flagt to build a dynamic executable.")
+            if (NOT ENABLE_NETCDF AND NOT ("${os_id}" STREQUAL "Arch" OR 
+                     "${os_like}" MATCHES ".*arch.*" OR
+                     "${os_id}" STREQUAL "fedora" ))
+                link_libraries("-static")
+            endif()
+        endif()
+    endif()
+
+elseif(WIN32)
+    if(CMAKE_Fortran_COMPILER_ID STREQUAL Intel)
+        set(fdialect        "/fpp /free /fpe0 /traceback /Qdiag-disable:all /Qdiag-disable:remarks")
+        set(fdebug          "/warn:all /check:bounds")
+        set(frelease        "/O")
+        set(FFC             "ifo")
+        link_libraries("-static")
+    elseif(CMAKE_Fortran_COMPILER_ID STREQUAL IntelLLVM)
+        set(fdialect        "/fpp /free /fpe0 /traceback")
+        set(fdebug          "/warn:all /check:bounds")
+        set(frelease        "/O")
+        set(FFC             "ifx")
+    elseif(CMAKE_Fortran_COMPILER_ID MATCHES GNU)
+        set(fdialect        "-cpp -fcheck=all -ffpe-trap=invalid,zero,overflow,underflow -fimplicit-none -ffree-line-length-none -fbacktrace -finit-local-zero -fno-unsafe-math-optimizations -frounding-math -fsignaling-nans")
+        set(fdebug          "-Wall ")
+        set(FFC             "gnu")
+        set(frelease        "-O")
+        link_libraries("-static")
+    endif()
+endif()
+
+# Get linker properties for later output.
+get_property(CURRENT_LINK_LIBS DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY LINK_LIBRARIES)
+
+
+string(TOLOWER ${CMAKE_HOST_SYSTEM_PROCESSOR} ARCH)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(AR "lin_${ARCH}")
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    set(AR "win_${ARCH}")
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+    set(AR "mac_${ARCH}")
+else()
+    set(AR "unknown")
+endif()
+
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    set(TY "-Rel")
+elseif(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(TY "-Dbg")
+else()
+    set(TY "")
+endif()
+
+#############################################################################
+# NetCDF Support Option
+option(ENABLE_NETCDF "Enable NetCDF climate input support" OFF)
+set(NETCDF_ROOT "/usr/local" CACHE PATH "NetCDF installation root directory")
+
+if(ENABLE_NETCDF)
+    # For static linking, NetCDF depends on HDF5, zlib, and system libraries
+    # Find the static libraries in order of dependency
+    find_library(NETCDF_C_LIBRARY NAMES libnetcdf.a netcdf 
+                 HINTS ${NETCDF_ROOT} ENV NETCDF_DIR 
+                 PATH_SUFFIXES lib lib64)
+    find_library(HDF5_HL_LIBRARY NAMES libhdf5_hl.a hdf5_hl 
+                 HINTS ${NETCDF_ROOT} ENV HDF5_DIR 
+                 PATH_SUFFIXES lib lib64)
+    find_library(HDF5_LIBRARY NAMES libhdf5.a hdf5 
+                 HINTS ${NETCDF_ROOT} ENV HDF5_DIR 
+                 PATH_SUFFIXES lib lib64)
+    find_library(ZLIB_LIBRARY NAMES libz.a z 
+                 HINTS ${NETCDF_ROOT} 
+                 PATH_SUFFIXES lib lib64)
+    find_path(NETCDF_C_INCLUDE NAMES netcdf.h 
+              HINTS ${NETCDF_ROOT} ENV NETCDF_DIR 
+              PATH_SUFFIXES include)
+    
+    if(NOT NETCDF_C_LIBRARY)
+        message(FATAL_ERROR "NetCDF C library not found. Set NETCDF_ROOT or NETCDF_DIR environment variable, or disable ENABLE_NETCDF.")
+    endif()
+    
+    # Build the complete list of NetCDF libraries for static linking
+    set(NETCDF_LIBRARIES ${NETCDF_C_LIBRARY})
+    if(HDF5_HL_LIBRARY)
+        list(APPEND NETCDF_LIBRARIES ${HDF5_HL_LIBRARY})
+    endif()
+    if(HDF5_LIBRARY)
+        list(APPEND NETCDF_LIBRARIES ${HDF5_LIBRARY})
+    endif()
+    if(ZLIB_LIBRARY)
+        list(APPEND NETCDF_LIBRARIES ${ZLIB_LIBRARY})
+    endif()
+    # Add system libraries needed for static linking
+    if(UNIX)
+        list(APPEND NETCDF_LIBRARIES dl m)
+    endif()
+    
+    message(STATUS "NetCDF C library: ${NETCDF_C_LIBRARY}")
+    message(STATUS "HDF5 HL library:  ${HDF5_HL_LIBRARY}")
+    message(STATUS "HDF5 library:     ${HDF5_LIBRARY}")
+    message(STATUS "ZLIB library:     ${ZLIB_LIBRARY}")
+    message(STATUS "NetCDF C include: ${NETCDF_C_INCLUDE}")
+    
+    set(NETCDF_SUFFIX "-nc")
+else()
+    set(NETCDF_SUFFIX "")
+endif()
+
+# SWAT Version number
+set(SWAT_VERSION ${TAG})
+set(SWATPLUS_EXE "swatplus-${SWAT_VERSION}-${FFC}-${AR}${TY}${NETCDF_SUFFIX}")
+
+# Set this to 'TRUE' to see the fortran command on compile
+set(CMAKE_VERBOSE_MAKEFILE FALSE)
+
+set(CMAKE_Fortran_FLAGS         "${CMAKE_Fortran_FLAGS} ${fdialect}")
+set(CMAKE_Fortran_FLAGS_DEBUG   "${CMAKE_Fortran_FLAGS_DEBUG} ${fdebug}")
+# set(CMAKE_Fortran_FLAGS_RELEASE "${CMAKE_Fortran_FLAGS_RELEASE} ${frelease}")
+set(CMAKE_Fortran_FLAGS_RELEASE "${frelease}")
+
+#############################################################################
+# Build
+# list (SORT _variableNames)
+# foreach (_variableName ${_variableNames})
+#     message(STATUS "${_variableName}=${${_variableName}}")
+# endforeach()
+
+if(EXISTS "${PROJECT_SOURCE_DIR}/src/main.f90.in")
+    string(TIMESTAMP ISO   "%Y-%m-%d %H:%M:%S")
+    string(TIMESTAMP TODAY "%Y-%m-%d")  # e.g. produces 2023-12-07
+    string(TIMESTAMP YEAR  "%Y")
+
+    configure_file(
+        "${PROJECT_SOURCE_DIR}/src/main.f90.in"
+        "${PROJECT_SOURCE_DIR}/src/main.f90"
+    )
+endif()
+
+if(EXISTS "${PROJECT_SOURCE_DIR}/ford.md.in")
+    configure_file(
+        "${PROJECT_SOURCE_DIR}/ford.md.in"
+        "${PROJECT_SOURCE_DIR}/ford.md"
+    )   
+endif()
+
+
+file(GLOB sources src/*.f90)
+add_executable(${SWATPLUS_EXE} ${sources})
+
+# NetCDF configuration
+if(ENABLE_NETCDF)
+    target_compile_definitions(${SWATPLUS_EXE} PRIVATE USE_NETCDF)
+    target_link_libraries(${SWATPLUS_EXE} PRIVATE ${NETCDF_LIBRARIES})
+    if(NETCDF_C_INCLUDE)
+        target_include_directories(${SWATPLUS_EXE} PRIVATE ${NETCDF_C_INCLUDE})
+    endif()
+    if(CMAKE_Fortran_COMPILER_ID STREQUAL IntelLLVM)
+        target_link_options(${SWATPLUS_EXE} PRIVATE
+            "-Wl,-rpath,/apps/brussel/RL9/zen2-ib/software/intel-compilers/2025.1.1/compiler/2025.1/lib")
+    endif()
+endif()
+
+#############################################################################
+# Install
+install(TARGETS ${SWATPLUS_EXE} DESTINATION RUNTIME DESTINATION ${PROJECT_SOURCE_DIR})
+
+
+#############################################################################
+# Testing
+find_package(Python3 QUIET)
+
+set(spcheck "${PROJECT_SOURCE_DIR}/test/spcheck.py")
+set(exe_path "${PROJECT_BINARY_DIR}/${SWATPLUS_EXE}")
+set(test_dir "${PROJECT_BINARY_DIR}/data")
+set(ref_dir  "${PROJECT_SOURCE_DIR}/data")
+
+# error tolerances
+set(rerr "0.01")
+set(aerr "1e-8")
+
+add_test(Ames_sub1   ${Python3_EXECUTABLE} ${spcheck} ctest ${exe_path} ${ref_dir}/Ames_sub1 ${test_dir} --abserr ${aerr} --relerr ${rerr})
+# add_test(Ithaca_sub6 python3 ${check_py} ${exe_path} ${ref_dir}/Ithaca_sub6 ${test_dir} ${aerr} ${rerr})
+
+
+#############################################################################
+# Summary
+message( "-- Verbose Makefile      ${CMAKE_VERBOSE_MAKEFILE}")
+message( "-- Generator             ${CMAKE_GENERATOR_TOOLSET}")
+message( "-- VS Platform           ${CMAKE_VS_PLATFORM_TOOLSET}")
+message( "-- Detected OS ID:       ${os_id}")
+message( "-- Detected OS Version:  ${os_version}")
+message( "-- Detected OS Like:     ${os_like}")
+message( "-- Detected Pretty Name: ${pretty_name}")
+message( "-- Build Type            ${CMAKE_BUILD_TYPE}")
+message( "-- Compiler              ${CMAKE_Fortran_COMPILER} (${CMAKE_Fortran_COMPILER_ID} ${CMAKE_Fortran_COMPILER_VERSION})")
+message( "-- FFLAGS                ${CMAKE_Fortran_FLAGS}")
+message( "--  RELEASE              ${CMAKE_Fortran_FLAGS_RELEASE}")
+message( "--  DEBUG                ${CMAKE_Fortran_FLAGS_DEBUG}")
+message( "-- Link_libraries        ${CURRENT_LINK_LIBS}")
+message( "-- PROJECT_DIR           ${PROJECT_SOURCE_DIR}")
+message( "-- BINARY_DIR            ${PROJECT_BINARY_DIR}")
+message( "-- Install Prefix        ${CMAKE_INSTALL_PREFIX}")
+message( "-- Executable            ${SWATPLUS_EXE}, rev/tag: ${SWAT_VERSION}")
+message( "-- NetCDF Support        ${ENABLE_NETCDF}")
+if(ENABLE_NETCDF)
+message( "--  NetCDF Library       ${NETCDF_C_LIBRARY}")
+endif()
+message( "-- FORD project          ${PROJECT_SOURCE_DIR}/ford.md")
+message( "-- Test Data Dir         ${ref_dir}")
+message( "--  Abs Error            ${aerr}")
+message( "--  Rel Error            ${rerr}")
