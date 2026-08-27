@@ -9,7 +9,7 @@ subroutine cli_ncdf_meas
     use time_module
     use input_file_module
     use iso_c_binding
-    use cli_ncdf_date, only: is_leap_year, add_days_to_date, parse_time_units
+    use cli_ncdf_date, only: day_of_year, add_days_to_date, parse_time_units
     use ieee_arithmetic, only: ieee_is_nan
 
     implicit none
@@ -124,7 +124,13 @@ subroutine cli_ncdf_meas
     integer :: ilat, ilon
     
     ! Variables for date calculation
-    integer :: days_since_ref, year, month, day
+    integer :: days_since_ref
+    ! Calendar extent of the netCDF file itself, decoded from its time axis
+    integer :: nc_start_yr, nc_start_mo, nc_start_dy
+    integer :: nc_end_yr, nc_end_mo, nc_end_dy
+    ! first_yr = calendar year stored in row 1 of the %ts arrays
+    ! nbyr_nc  = number of rows those arrays need
+    integer :: first_yr, nbyr_nc
     integer :: ref_year, ref_month, ref_day
     character(len=256) :: time_units
     character(len=257, kind=c_char) :: time_units_c
@@ -132,7 +138,6 @@ subroutine cli_ncdf_meas
     
     ! Loop counters and diagnostics
     integer :: itime, iyear, iday, i, iwst
-    integer :: actual_year, days_in_year_loop
     logical :: exists
     
     ! Helper function to convert C string pointer to Fortran string
@@ -279,15 +284,45 @@ subroutine cli_ncdf_meas
         call parse_time_units(time_units, ref_year, ref_month, ref_day)
         
         status = nc_get_var_float_c(ncid, time_varid, time_vals)
-        if (status == NC_NOERR) then
-            if (ntime >= 1) then
-                days_since_ref = int(time_vals(1))
-                call add_days_to_date(ref_year, ref_month, ref_day, days_since_ref, year, month, day)
-            endif
-        else
+        if (status /= NC_NOERR) then
             write (*,*) "! error reading time data, code: ", status
             write (9003,*) "! error reading time data, code: ", status
             stop
+        endif
+
+        if (ntime < 1) then
+            write (*,*) "! error: NetCDF time dimension is empty"
+            write (9003,*) "! error: NetCDF time dimension is empty"
+            stop
+        endif
+
+        ! Decode the first and last records of the file's own time axis.
+
+        days_since_ref = int(time_vals(1))
+        call add_days_to_date(ref_year, ref_month, ref_day, days_since_ref,   &
+                              nc_start_yr, nc_start_mo, nc_start_dy)
+        days_since_ref = int(time_vals(ntime))
+        call add_days_to_date(ref_year, ref_month, ref_day, days_since_ref,   &
+                              nc_end_yr, nc_end_mo, nc_end_dy)
+
+        ! Row 1 of the %ts arrays holds the first year at or after the
+        ! simulation start; earlier records are skipped when populating.
+
+        first_yr = max(nc_start_yr, time%yrc)
+        nbyr_nc  = nc_end_yr - first_yr + 1
+
+        write (*,'(a,i4.4,a,i2.2,a,i2.2,a,i4.4,a,i2.2,a,i2.2)')               &
+            " netcdf climate record: ", nc_start_yr, "-", nc_start_mo, "-",   &
+            nc_start_dy, " to ", nc_end_yr, "-", nc_end_mo, "-", nc_end_dy
+        write (9003,'(a,i4.4,a,i2.2,a,i2.2,a,i4.4,a,i2.2,a,i2.2)')            &
+            " netcdf climate record: ", nc_start_yr, "-", nc_start_mo, "-",   &
+            nc_start_dy, " to ", nc_end_yr, "-", nc_end_mo, "-", nc_end_dy
+
+        if (nbyr_nc < 1) then
+            write (*,*) "! warning: NetCDF climate record does not reach the simulation period;"
+            write (*,*) "!          the weather generator will be used throughout"
+            write (9003,*) "! warning: NetCDF climate record ends before the simulation starts"
+            nbyr_nc = 1
         endif
     else
         write (*,*) "WARNING: No time variable found in NetCDF, code:", status
@@ -352,7 +387,7 @@ subroutine cli_ncdf_meas
         call setup_station_metadata(iwst)
         
         ! Setup time series arrays
-        call setup_timeseries_arrays(iwst, ntime,year) ! year is added to set the start year form the actual data and not from time.sim
+        call setup_timeseries_arrays(iwst)
         
         ! Populate time series data
         call populate_timeseries_data(iwst, target_lat_idx, target_lon_idx, ntime)
@@ -518,143 +553,136 @@ contains
     end subroutine setup_station_metadata
     
     ! Helper subroutine to setup time series arrays
-    subroutine setup_timeseries_arrays(iwst, ntime_total,start_year)
-        integer, intent(in) :: iwst, ntime_total,start_year
-        
-        ! Calculate number of years (approximate for daily data)
-        pcp(iwst)%nbyr = max(1, ntime_total / 365)
-        tmp(iwst)%nbyr = pcp(iwst)%nbyr
-        slr(iwst)%nbyr = pcp(iwst)%nbyr
-        hmd(iwst)%nbyr = pcp(iwst)%nbyr
-        wnd(iwst)%nbyr = pcp(iwst)%nbyr
-        
+    !
+    ! The bounds follow the convention cli_pmeas.f90 establishes and that
+    ! climate_control.f90 / cli_precip_control.f90 rely on:
+    !   %start_yr / %start_day / %end_yr / %end_day  describe the FILE's extent and feed cli_bounds_check
+    !   %yrs_start  simulation years elapsed before the record begins
+    !   row r of %ts(day, r) holds calendar year first_yr + r - 1, where
+    !   first_yr = max(nc_start_yr, time%yrc), because the run-time row index is time%yrs - %yrs_start
+
+    subroutine setup_timeseries_arrays(iwst)
+        integer, intent(in) :: iwst
+
+        pcp(iwst)%nbyr = nbyr_nc
+        tmp(iwst)%nbyr = nbyr_nc
+        slr(iwst)%nbyr = nbyr_nc
+        hmd(iwst)%nbyr = nbyr_nc
+        wnd(iwst)%nbyr = nbyr_nc
+
         ! Set timestep (0 = daily)
         pcp(iwst)%tstep = 0
         tmp(iwst)%tstep = 0
         slr(iwst)%tstep = 0
         hmd(iwst)%tstep = 0
         wnd(iwst)%tstep = 0
-        
+
         ! Initialize counters
         pcp(iwst)%days_gen = 0
         tmp(iwst)%days_gen = 0
         slr(iwst)%days_gen = 0
         hmd(iwst)%days_gen = 0
         wnd(iwst)%days_gen = 0
-        
-        ! Set start and end years
-        pcp(iwst)%start_yr = start_year                     !!time%yrc !! This causes a bug if the simulation does not start the same year as the weather data
-        pcp(iwst)%end_yr = start_year + pcp(iwst)%nbyr - 1  !!time%yrc + pcp(iwst)%nbyr - 1
-        pcp(iwst)%start_day = 1
-        
-        ! Calculate end_day based on leap year for last year
-        actual_year = pcp(iwst)%end_yr
-        if (is_leap_year(actual_year)) then
-            pcp(iwst)%end_day = 366
-        else
-            pcp(iwst)%end_day = 365
-        endif
-        
-        ! Calculate yrs_start
-        if (pcp(iwst)%start_yr > time%yrc) then
-            pcp(iwst)%yrs_start = pcp(iwst)%start_yr - time%yrc
-        else
-            pcp(iwst)%yrs_start = 0
-        end if
-        
+
+        ! Bounds taken from the netCDF file's own time axis
+        pcp(iwst)%start_yr  = nc_start_yr
+        pcp(iwst)%start_day = day_of_year(nc_start_yr, nc_start_mo, nc_start_dy)
+        pcp(iwst)%end_yr    = nc_end_yr
+        pcp(iwst)%end_day   = day_of_year(nc_end_yr, nc_end_mo, nc_end_dy)
+        pcp(iwst)%yrs_start = max(0, nc_start_yr - time%yrc)
+
         ! Copy to other climate variables
         tmp(iwst)%start_yr = pcp(iwst)%start_yr
         tmp(iwst)%end_yr = pcp(iwst)%end_yr
         tmp(iwst)%start_day = pcp(iwst)%start_day
         tmp(iwst)%end_day = pcp(iwst)%end_day
         tmp(iwst)%yrs_start = pcp(iwst)%yrs_start
-        
+
         slr(iwst)%start_yr = pcp(iwst)%start_yr
         slr(iwst)%end_yr = pcp(iwst)%end_yr
         slr(iwst)%start_day = pcp(iwst)%start_day
         slr(iwst)%end_day = pcp(iwst)%end_day
         slr(iwst)%yrs_start = pcp(iwst)%yrs_start
-        
+
         hmd(iwst)%start_yr = pcp(iwst)%start_yr
         hmd(iwst)%end_yr = pcp(iwst)%end_yr
         hmd(iwst)%start_day = pcp(iwst)%start_day
         hmd(iwst)%end_day = pcp(iwst)%end_day
         hmd(iwst)%yrs_start = pcp(iwst)%yrs_start
-        
+
         wnd(iwst)%start_yr = pcp(iwst)%start_yr
         wnd(iwst)%end_yr = pcp(iwst)%end_yr
         wnd(iwst)%start_day = pcp(iwst)%start_day
         wnd(iwst)%end_day = pcp(iwst)%end_day
         wnd(iwst)%yrs_start = pcp(iwst)%yrs_start
-        
-        ! Allocate time series arrays
-        allocate (pcp(iwst)%ts(366, pcp(iwst)%nbyr), source = 0.)
-        allocate (tmp(iwst)%ts(366, tmp(iwst)%nbyr), source = 0.)   ! ts for TMAX
-        allocate (tmp(iwst)%ts2(366, tmp(iwst)%nbyr), source = 0.) ! ts2 for TMIN
-        allocate (slr(iwst)%ts(366, slr(iwst)%nbyr), source = 0.)
-        allocate (hmd(iwst)%ts(366, hmd(iwst)%nbyr), source = 0.)
-        allocate (wnd(iwst)%ts(366, wnd(iwst)%nbyr), source = 0.)
-        
+
+        ! Allocate time series arrays.
+        ! Seed with -99. (SWAT+ "missing, generate instead") rather than 0., so
+        ! that days the netCDF file does not cover -- a partial first or last
+        ! year, or a gap in the time axis -- fall back to the weather generator
+        ! instead of silently reading as zero rain / zero radiation.
+        allocate (pcp(iwst)%ts(366, nbyr_nc), source = -99.)
+        allocate (tmp(iwst)%ts(366, nbyr_nc), source = -99.)   ! ts for TMAX
+        allocate (tmp(iwst)%ts2(366, nbyr_nc), source = -99.)  ! ts2 for TMIN
+        allocate (slr(iwst)%ts(366, nbyr_nc), source = -99.)
+        allocate (hmd(iwst)%ts(366, nbyr_nc), source = -99.)
+        allocate (wnd(iwst)%ts(366, nbyr_nc), source = -99.)
+
     end subroutine setup_timeseries_arrays
     
     ! Helper subroutine to populate time series data
+    !
+    ! Walks the netCDF time axis and places each record on the calendar date
+    ! that axis specifies. Records before the simulation start year, or beyond the last row, are skipped.
+
     subroutine populate_timeseries_data(iwst, target_lat_idx, target_lon_idx, ntime_total)
         integer, intent(in) :: iwst, target_lat_idx, target_lon_idx, ntime_total
-        
-        itime = 1
-        do iyear = 1, pcp(iwst)%nbyr
-            ! Calculate actual year for leap year check
-            actual_year = pcp(iwst)%start_yr + iyear - 1
-            if (is_leap_year(actual_year)) then
-                days_in_year_loop = 366
-            else
-                days_in_year_loop = 365
-            endif
-            
-            do iday = 1, days_in_year_loop
-                if (itime <= ntime_total) then
-                    ! Every assignment goes through nc_value, which routes
-                    ! missing data (absent variable, negative fill, NaN) to
-                    ! -99. and scales and clamps everything else.
 
-                    ! Precipitation - apply station scaling factor
-                    pcp(iwst)%ts(iday, iyear) = nc_value(                     &
-                        pcp_data(target_lon_idx, target_lat_idx, itime),      &
-                        wst(iwst)%pcp_factor, 0., NO_LIMIT)
+        integer :: nc_yr, nc_mo, nc_dy
 
-                    ! Temperature - populate both ts (TMAX) and ts2 (TMIN),
-                    ! neither of which is clamped
-                    tmp(iwst)%ts(iday, iyear) = nc_value(                     &
-                        tmax_data(target_lon_idx, target_lat_idx, itime),     &
-                        wst(iwst)%tmax_factor, -NO_LIMIT, NO_LIMIT)
+        do itime = 1, ntime_total
+            call add_days_to_date(ref_year, ref_month, ref_day,               &
+                                  int(time_vals(itime)), nc_yr, nc_mo, nc_dy)
 
-                    tmp(iwst)%ts2(iday, iyear) = nc_value(                    &
-                        tmin_data(target_lon_idx, target_lat_idx, itime),     &
-                        wst(iwst)%tmin_factor, -NO_LIMIT, NO_LIMIT)
+            iyear = nc_yr - first_yr + 1
+            if (iyear < 1 .or. iyear > nbyr_nc) cycle
+            iday = day_of_year(nc_yr, nc_mo, nc_dy)
 
-                    ! Solar radiation
-                    slr(iwst)%ts(iday, iyear) = nc_value(                     &
-                        slr_data(target_lon_idx, target_lat_idx, itime),      &
-                        wst(iwst)%slr_factor, 0., NO_LIMIT)
+            ! Every assignment goes through nc_value, which routes missing data
+            ! (absent variable, negative fill, NaN) to -99. and scales and
+            ! clamps everything else.
 
-                    ! Humidity
-                    hmd(iwst)%ts(iday, iyear) = nc_value(                     &
-                        hmd_data(target_lon_idx, target_lat_idx, itime),      &
-                        wst(iwst)%hmd_factor, 0., 1.)
+            ! Precipitation - apply station scaling factor
+            pcp(iwst)%ts(iday, iyear) = nc_value(                             &
+                pcp_data(target_lon_idx, target_lat_idx, itime),              &
+                wst(iwst)%pcp_factor, 0., NO_LIMIT)
 
-                    ! Wind speed
-                    wnd(iwst)%ts(iday, iyear) = nc_value(                     &
-                        wnd_data(target_lon_idx, target_lat_idx, itime),      &
-                        wst(iwst)%wnd_factor, 0., NO_LIMIT)
+            ! Temperature - populate both ts (TMAX) and ts2 (TMIN), neither of
+            ! which is clamped
+            tmp(iwst)%ts(iday, iyear) = nc_value(                             &
+                tmax_data(target_lon_idx, target_lat_idx, itime),             &
+                wst(iwst)%tmax_factor, -NO_LIMIT, NO_LIMIT)
 
-                    itime = itime + 1
-                else
-                    ! No more NetCDF data available
-                    exit
-                endif
-            end do
+            tmp(iwst)%ts2(iday, iyear) = nc_value(                            &
+                tmin_data(target_lon_idx, target_lat_idx, itime),             &
+                wst(iwst)%tmin_factor, -NO_LIMIT, NO_LIMIT)
+
+            ! Solar radiation
+            slr(iwst)%ts(iday, iyear) = nc_value(                             &
+                slr_data(target_lon_idx, target_lat_idx, itime),              &
+                wst(iwst)%slr_factor, 0., NO_LIMIT)
+
+            ! Humidity
+            hmd(iwst)%ts(iday, iyear) = nc_value(                             &
+                hmd_data(target_lon_idx, target_lat_idx, itime),              &
+                wst(iwst)%hmd_factor, 0., 1.)
+
+            ! Wind speed
+            wnd(iwst)%ts(iday, iyear) = nc_value(                             &
+                wnd_data(target_lon_idx, target_lat_idx, itime),              &
+                wst(iwst)%wnd_factor, 0., NO_LIMIT)
         end do
-        
+
     end subroutine populate_timeseries_data
 
 end subroutine cli_ncdf_meas

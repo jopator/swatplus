@@ -22,9 +22,17 @@ Usage:
 
 import argparse
 import datetime as dt
+import warnings
 
 import netCDF4
 import numpy as np
+
+# netCDF4 1.7.4 sets .shape on a numpy array inside its own Variable.__setitem__
+# (_netCDF4.pyx:5633), which numpy 2.5 deprecates. Nothing this script passes in
+# can avoid it and it fires once per variable written, so silence just that one.
+warnings.filterwarnings(
+    "ignore", category=DeprecationWarning,
+    message="Setting the shape on a NumPy array")
 
 REF = dt.date(1900, 1, 1)
 
@@ -77,8 +85,7 @@ if __name__ == "__main__":
     def field(name, values, units, fill=np.nan):
         var = ds.createVariable(name, "f4", ("time", "lat", "lon"), fill_value=fill)
         var.units = units
-        # same value in every cell. netCDF4 1.7.4 emits a numpy 2.5
-        # DeprecationWarning from inside its own __setitem__ here; harmless.
+        # same value in every cell
         var[:] = values[:, None, None] * np.ones((1, nlat, nlon), dtype="f4")
 
     pcp = np.array([pcp_value(d) for d in dates], dtype="f4")
