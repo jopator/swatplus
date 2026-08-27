@@ -9,7 +9,9 @@ subroutine cli_ncdf_meas
     use time_module
     use input_file_module
     use iso_c_binding
-    
+    use cli_ncdf_date, only: is_leap_year, add_days_to_date, parse_time_units
+    use ieee_arithmetic, only: ieee_is_nan
+
     implicit none
     
     ! NetCDF C constants
@@ -19,7 +21,10 @@ subroutine cli_ncdf_meas
     integer(c_int), parameter :: NC_CHAR = 2
     integer(c_int), parameter :: NC_MAX_NAME = 256
     integer(c_int), parameter :: NC_MAX_VAR_DIMS = 32
-    
+
+    ! Sentinel used to disable a clamp in nc_value
+    real, parameter :: NO_LIMIT = 1.e30
+
     ! NetCDF C function interfaces
     interface
         function nc_open_c(path, mode, ncidp) bind(c, name='nc_open')
@@ -431,11 +436,47 @@ contains
         else
             write (*,*) trim(var_name), " will use wgn"
             write (9003,*) "WARNING: ", trim(var_name), " was not found in NetCDF, wgn will be used, code:", status
-            var_data = -99.0  ! Fill with -99 if variable not found for missing data
+            ! -99. is SWAT+'s "no measured data" sentinel. nc_value() carries it
+            ! through to the %ts arrays unscaled and unclamped, which is what
+            ! makes climate_control's "<= -97." test fire and the generator run.
+            var_data = -99.0
         endif
         
     end subroutine read_climate_variable
-    
+
+    ! Convert one raw netCDF value into a SWAT+ time series value.
+    !
+    ! SWAT+ treats any value <= -97. as "not measured -> goes to the weather
+    ! generator". Three things must therefore survive untouched all the way
+    ! into the %ts arrays as -99.:
+    !   * the -99. that read_climate_variable writes for a variable that is
+    !     absent from the file altogether
+    !   * a negative _FillValue, e.g. the -9999. used by some source files
+    !   * NaN, which is the _FillValue of e.g. the 20crv3-era5 files in use
+    !
+    ! Scaling or clamping any of those turns a gap into an actual value: before
+    ! this function existed, a missing pcp was clamped from -99. to 0. and the
+    ! whole simulation ran with zero rainfall instead of a generated one.
+    !
+    ! NaN is tested first and with ieee_is_nan, never with an ordered
+    ! comparison: under the repo's -fpe0 / -ffpe-trap=invalid flags a NaN in a
+    ! "<" test raises the invalid exception and aborts the run. That is not
+    ! hypothetical -- it is what the old line 600 clamp did to a NaN humidity.
+    real function nc_value(raw, factor, clamp_low, clamp_high)
+        real, intent(in) :: raw, factor, clamp_low, clamp_high
+
+        if (ieee_is_nan(raw)) then
+            nc_value = -99.
+        else if (raw <= -97.) then
+            nc_value = -99.
+        else
+            nc_value = raw * factor
+            if (nc_value < clamp_low) nc_value = clamp_low
+            if (nc_value > clamp_high) nc_value = clamp_high
+        end if
+
+    end function nc_value
+
     ! Helper subroutine to setup station metadata
     subroutine setup_station_metadata(iwst)
         integer, intent(in) :: iwst
@@ -572,40 +613,40 @@ contains
             
             do iday = 1, days_in_year_loop
                 if (itime <= ntime_total) then
+                    ! Every assignment goes through nc_value, which routes
+                    ! missing data (absent variable, negative fill, NaN) to
+                    ! -99. and scales and clamps everything else.
+
                     ! Precipitation - apply station scaling factor
-                    if (allocated(pcp_data)) then
-                        pcp(iwst)%ts(iday, iyear) = pcp_data(target_lon_idx, target_lat_idx, itime) * wst(iwst)%pcp_factor
-                        if (pcp(iwst)%ts(iday, iyear) < 0.0) pcp(iwst)%ts(iday, iyear) = 0.0
-                    endif
-                    
-                    ! Temperature - populate both ts (TMAX) and ts2 (TMIN)
-                    if (allocated(tmax_data)) then
-                        tmp(iwst)%ts(iday, iyear) = tmax_data(target_lon_idx, target_lat_idx, itime) * wst(iwst)%tmax_factor
-                    endif
-                    
-                    if (allocated(tmin_data)) then
-                        tmp(iwst)%ts2(iday, iyear) = tmin_data(target_lon_idx, target_lat_idx, itime) * wst(iwst)%tmin_factor
-                    endif
-                    
+                    pcp(iwst)%ts(iday, iyear) = nc_value(                     &
+                        pcp_data(target_lon_idx, target_lat_idx, itime),      &
+                        wst(iwst)%pcp_factor, 0., NO_LIMIT)
+
+                    ! Temperature - populate both ts (TMAX) and ts2 (TMIN),
+                    ! neither of which is clamped
+                    tmp(iwst)%ts(iday, iyear) = nc_value(                     &
+                        tmax_data(target_lon_idx, target_lat_idx, itime),     &
+                        wst(iwst)%tmax_factor, -NO_LIMIT, NO_LIMIT)
+
+                    tmp(iwst)%ts2(iday, iyear) = nc_value(                    &
+                        tmin_data(target_lon_idx, target_lat_idx, itime),     &
+                        wst(iwst)%tmin_factor, -NO_LIMIT, NO_LIMIT)
+
                     ! Solar radiation
-                    if (allocated(slr_data)) then
-                        slr(iwst)%ts(iday, iyear) = slr_data(target_lon_idx, target_lat_idx, itime) * wst(iwst)%slr_factor
-                        if (slr(iwst)%ts(iday, iyear) < 0.0) slr(iwst)%ts(iday, iyear) = 0.0
-                    endif
-                    
+                    slr(iwst)%ts(iday, iyear) = nc_value(                     &
+                        slr_data(target_lon_idx, target_lat_idx, itime),      &
+                        wst(iwst)%slr_factor, 0., NO_LIMIT)
+
                     ! Humidity
-                    if (allocated(hmd_data)) then
-                        hmd(iwst)%ts(iday, iyear) = hmd_data(target_lon_idx, target_lat_idx, itime) * wst(iwst)%hmd_factor
-                        if (hmd(iwst)%ts(iday, iyear) < 0.0) hmd(iwst)%ts(iday, iyear) = 0.0
-                        if (hmd(iwst)%ts(iday, iyear) > 1.0) hmd(iwst)%ts(iday, iyear) = 1.0
-                    endif
-                    
+                    hmd(iwst)%ts(iday, iyear) = nc_value(                     &
+                        hmd_data(target_lon_idx, target_lat_idx, itime),      &
+                        wst(iwst)%hmd_factor, 0., 1.)
+
                     ! Wind speed
-                    if (allocated(wnd_data)) then
-                        wnd(iwst)%ts(iday, iyear) = wnd_data(target_lon_idx, target_lat_idx, itime) * wst(iwst)%wnd_factor
-                        if (wnd(iwst)%ts(iday, iyear) < 0.0) wnd(iwst)%ts(iday, iyear) = 0.0
-                    endif
-                    
+                    wnd(iwst)%ts(iday, iyear) = nc_value(                     &
+                        wnd_data(target_lon_idx, target_lat_idx, itime),      &
+                        wst(iwst)%wnd_factor, 0., NO_LIMIT)
+
                     itime = itime + 1
                 else
                     ! No more NetCDF data available
@@ -615,117 +656,6 @@ contains
         end do
         
     end subroutine populate_timeseries_data
-
-    ! Helper subroutine to parse time units string
-    subroutine parse_time_units(units_str, ref_yr, ref_mo, ref_dy)
-        character(len=*), intent(in) :: units_str
-        integer, intent(out) :: ref_yr, ref_mo, ref_dy
-        
-        integer :: pos1, pos2, ios
-        character(len=20) :: date_part
-        
-        ! Initialize defaults
-        ref_yr = 1970
-        ref_mo = 1
-        ref_dy = 1
-        
-        ! Find "since" keyword
-        pos1 = index(units_str, "since")
-        if (pos1 > 0) then
-            pos1 = pos1 + 5  ! Move past "since"
-            
-            ! Skip whitespace
-            do while (pos1 <= len(units_str) .and. units_str(pos1:pos1) == ' ')
-                pos1 = pos1 + 1
-            end do
-            
-            ! Find end of date part (before time if present)
-            pos2 = index(units_str(pos1:), ' ')
-            if (pos2 == 0) then
-                pos2 = len(units_str) + 1
-            else
-                pos2 = pos1 + pos2 - 1
-            endif
-            
-            date_part = units_str(pos1:pos2-1)
-            
-            ! Parse YYYY-MM-DD format
-            read(date_part(1:4), *, iostat=ios) ref_yr
-            if (ios == 0 .and. len_trim(date_part) >= 7) then
-                read(date_part(6:7), *, iostat=ios) ref_mo
-            endif
-            if (ios == 0 .and. len_trim(date_part) >= 10) then
-                read(date_part(9:10), *, iostat=ios) ref_dy
-            endif
-        endif
-        
-        ! Validate parsed values
-        if (ref_yr < 1000 .or. ref_yr > 5000) ref_yr = 1970
-        if (ref_mo < 1 .or. ref_mo > 12) ref_mo = 1
-        if (ref_dy < 1 .or. ref_dy > 31) ref_dy = 1
-        
-    end subroutine parse_time_units
-    
-    ! Helper subroutine to add days to a date
-    subroutine add_days_to_date(start_yr, start_mo, start_dy, days_to_add, end_yr, end_mo, end_dy)
-        integer, intent(in) :: start_yr, start_mo, start_dy, days_to_add
-        integer, intent(out) :: end_yr, end_mo, end_dy
-        
-        integer :: days_left, days_in_month
-        integer :: month_days(12) = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-        
-        end_yr = start_yr
-        end_mo = start_mo
-        end_dy = start_dy
-        days_left = days_to_add
-        
-        ! Add days
-        do while (days_left > 0)
-            ! Check for leap year and adjust February
-            if (end_mo == 2) then
-                if (is_leap_year(end_yr)) then
-                    days_in_month = 29
-                else
-                    days_in_month = 28
-                endif
-            else
-                days_in_month = month_days(end_mo)
-            endif
-            
-            if (end_dy + days_left <= days_in_month) then
-                ! Remaining days fit in current month
-                end_dy = end_dy + days_left
-                days_left = 0
-            else
-                ! Move to next month
-                days_left = days_left - (days_in_month - end_dy + 1)
-                end_dy = 1
-                end_mo = end_mo + 1
-                if (end_mo > 12) then
-                    end_mo = 1
-                    end_yr = end_yr + 1
-                endif
-            endif
-        end do
-        
-    end subroutine add_days_to_date
-    
-    ! Helper function to check if year is leap year
-    logical function is_leap_year(check_year)
-        integer, intent(in) :: check_year
-        
-        is_leap_year = .false.
-        if (mod(check_year, 4) == 0) then
-            if (mod(check_year, 100) == 0) then
-                if (mod(check_year, 400) == 0) then
-                    is_leap_year = .true.
-                endif
-            else
-                is_leap_year = .true.
-            endif
-        endif
-        
-    end function is_leap_year
 
 end subroutine cli_ncdf_meas
 
