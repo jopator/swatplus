@@ -217,14 +217,13 @@ if(ENABLE_NETCDF)
         target_include_directories(${SWATPLUS_EXE} PRIVATE ${NETCDF_C_INCLUDE})
     endif()
     if(CMAKE_Fortran_COMPILER_ID STREQUAL IntelLLVM)
-        target_link_options(${SWATPLUS_EXE} PRIVATE
-            "-Wl,-rpath,/apps/brussel/RL9/zen2-ib/software/intel-compilers/2025.1.1/compiler/2025.1/lib")
+        target_link_options(${SWATPLUS_EXE} PRIVATE "-static-intel")
     endif()
 endif()
 
 #############################################################################
 # Install
-install(TARGETS ${SWATPLUS_EXE} DESTINATION RUNTIME DESTINATION ${PROJECT_SOURCE_DIR})
+install(TARGETS ${SWATPLUS_EXE} RUNTIME DESTINATION bin)
 
 
 #############################################################################

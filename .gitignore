@@ -117,3 +117,5 @@ ford.md
 /workdata
 data
 *.out
+.claude
+docs

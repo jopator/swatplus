@@ -347,7 +347,7 @@ subroutine cli_ncdf_meas
         call setup_station_metadata(iwst)
         
         ! Setup time series arrays
-        call setup_timeseries_arrays(iwst, ntime)
+        call setup_timeseries_arrays(iwst, ntime,year) ! year is added to set the start year form the actual data and not from time.sim
         
         ! Populate time series data
         call populate_timeseries_data(iwst, target_lat_idx, target_lon_idx, ntime)
@@ -477,8 +477,8 @@ contains
     end subroutine setup_station_metadata
     
     ! Helper subroutine to setup time series arrays
-    subroutine setup_timeseries_arrays(iwst, ntime_total)
-        integer, intent(in) :: iwst, ntime_total
+    subroutine setup_timeseries_arrays(iwst, ntime_total,start_year)
+        integer, intent(in) :: iwst, ntime_total,start_year
         
         ! Calculate number of years (approximate for daily data)
         pcp(iwst)%nbyr = max(1, ntime_total / 365)
@@ -502,8 +502,8 @@ contains
         wnd(iwst)%days_gen = 0
         
         ! Set start and end years
-        pcp(iwst)%start_yr = time%yrc
-        pcp(iwst)%end_yr = time%yrc + pcp(iwst)%nbyr - 1
+        pcp(iwst)%start_yr = start_year                     !!time%yrc !! This causes a bug if the simulation does not start the same year as the weather data
+        pcp(iwst)%end_yr = start_year + pcp(iwst)%nbyr - 1  !!time%yrc + pcp(iwst)%nbyr - 1
         pcp(iwst)%start_day = 1
         
         ! Calculate end_day based on leap year for last year
