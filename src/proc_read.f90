@@ -19,7 +19,7 @@
                   path_cha_res_read, pest_cha_res_read, salt_cha_read, water_allocation_read, &
                   water_pipe_read, water_tower_read, water_treatment_read, water_use_read, cs_uptake
 #ifdef USE_NETCDF
-      external :: cli_ncdf_meas
+      external :: cli_ncdf_meas, cli_ncdf_read_atmodep
 #endif
              
       call ch_read_temp
@@ -60,6 +60,12 @@
           ! NetCDF path: read stations first, then climate data to set up arrays properly
           call cli_staread    ! NetCDF: reads scale factors, sets up wco_c%*gage names
           call cli_ncdf_meas  ! NetCDF: reads NetCDF data, populates climate arrays
+          ! Deposition last: Only runs if atmo dep nc file is specified and exists
+          if (len_trim(in_cli%atmo_cli) > 3) then
+            if (in_cli%atmo_cli(len_trim(in_cli%atmo_cli)-2:len_trim(in_cli%atmo_cli)) == ".nc") then
+              call cli_ncdf_read_atmodep
+            end if
+          end if
 #else
           write(*,*) "! Error: NetCDF support is not enabled in this build."
           write(*,*) "       To use 'netcdf.ncw', rebuild SWAT+ with -DENABLE_NETCDF=ON"

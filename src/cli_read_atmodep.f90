@@ -16,12 +16,20 @@
       integer :: iyr = 0              !           |counter
       integer :: imo_atmo = 0         !           |
       logical :: i_exist              !none       |check to determine if file exists
+      logical :: is_ncdf = .false.    !none       |deposition file is gridded netCDF
       integer :: iyrc_atmo = 0        !           |
       
       eof = 0
 
+      ! A deposition file whose name ends in .nc is gridded netCDF and is read later by cli_ncdf_read_atmodep
+
+      is_ncdf = .false.
+      if (len_trim(in_cli%atmo_cli) > 3) then
+        is_ncdf = in_cli%atmo_cli(len_trim(in_cli%atmo_cli)-2:len_trim(in_cli%atmo_cli)) == ".nc"
+      end if
+
       inquire (file=in_cli%atmo_cli,exist=i_exist)
-      if (.not. i_exist .or. in_cli%atmo_cli == "null") then
+      if (.not. i_exist .or. in_cli%atmo_cli == "null" .or. is_ncdf) then
         !!no filename 
         allocate (atmodep(0:0))
         allocate (atmo_n(0:0))
