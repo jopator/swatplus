@@ -119,3 +119,4 @@ data
 *.out
 .claude
 docs
+.archive
