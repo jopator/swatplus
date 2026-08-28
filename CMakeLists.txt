@@ -250,6 +250,14 @@ set_target_properties(test_cli_ncdf_date PROPERTIES
                       Fortran_MODULE_DIRECTORY ${PROJECT_BINARY_DIR}/mod_test)
 add_test(NAME cli_ncdf_date COMMAND test_cli_ncdf_date)
 
+# Fortran unit tests for the netCDF atmospheric deposition helpers
+add_executable(test_cli_ncdf_atmodep_util
+               ${PROJECT_SOURCE_DIR}/src/cli_ncdf_atmodep_util.f90
+               ${PROJECT_SOURCE_DIR}/test/test_cli_ncdf_atmodep_util.f90)
+set_target_properties(test_cli_ncdf_atmodep_util PROPERTIES
+                      Fortran_MODULE_DIRECTORY ${PROJECT_BINARY_DIR}/mod_test)
+add_test(NAME cli_ncdf_atmodep_util COMMAND test_cli_ncdf_atmodep_util)
+
 
 #############################################################################
 # Summary
