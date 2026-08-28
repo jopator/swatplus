@@ -11,12 +11,14 @@ subroutine cli_staread
    external :: search
    character (len=80) :: titldum = ""!           |title of file
    character (len=80) :: header = "" !           |header of file
-   integer :: eof = 0              !           |end of file
-   integer :: imax = 0             !none       |determine max number for array (imax) and total number in file
-   integer :: iwgn = 0             !           |
-   logical :: i_exist              !none       |check to determine if file exists
-   !integer :: iwst                 !none       |counter
-   integer :: i = 0                !none       |counter
+   character (len=500) :: header_line = ""   !   |full header of netcdf.ncw
+   logical :: has_dep_cols = .false.         !   |netcdf.ncw has deposition columns
+   integer :: eof = 0              !             |end of file
+   integer :: imax = 0             !none         |determine max number for array (imax) and total number in file
+   integer :: iwgn = 0             !             |
+   logical :: i_exist              !none         |check to determine if file exists
+   !integer :: iwst                 !none        |counter
+   integer :: i = 0                !none         |counter
 
    eof = 0
    imax = 0
@@ -66,8 +68,16 @@ subroutine cli_staread
             rewind (107)
             read (107,*,iostat=eof) titldum
             if (eof < 0) exit
-            read (107,*,iostat=eof) header
+            read (107,'(a)',iostat=eof) header_line
             if (eof < 0) exit
+
+            ! Deposition columns are optional so this checks if they exist.
+            ! If they do the bool is set to true which is useful later on.
+            has_dep_cols = index(header_line, "nh4_rf") > 0
+            if (has_dep_cols) then
+               write (*,*) "netcdf.ncw: atmospheric deposition columns found"
+               write (9003,*) "netcdf.ncw: atmospheric deposition columns found"
+            end if
 
             ! set files same as db_mx%wst if using NetCDF
             db_mx%pcpfiles = db_mx%wst
@@ -78,10 +88,19 @@ subroutine cli_staread
 
 
             do i = 1, db_mx%wst
-               read (107,*,iostat=eof) wst(i)%name, wst(i)%wco_c%wgn, wst(i)%lat, wst(i)%lon, wst(i)%elev, &
-                  wst(i)%pcp_factor, wst(i)%tmin_factor, wst(i)%tmax_factor, &
-                  wst(i)%slr_factor, wst(i)%hmd_factor, wst(i)%wnd_factor, &
-                  wst(i)%wco_c%petgage
+               if (has_dep_cols) then !With atmo dep netcdf
+                  read (107,*,iostat=eof) wst(i)%name, wst(i)%wco_c%wgn, wst(i)%lat, wst(i)%lon, wst(i)%elev, &
+                     wst(i)%pcp_factor, wst(i)%tmin_factor, wst(i)%tmax_factor, &
+                     wst(i)%slr_factor, wst(i)%hmd_factor, wst(i)%wnd_factor, &
+                     wst(i)%wco_c%petgage, &
+                     wst(i)%nh4_rf_factor, wst(i)%no3_rf_factor, &
+                     wst(i)%nh4_dry_factor, wst(i)%no3_dry_factor
+               else !Normal procedure (netcdf)
+                  read (107,*,iostat=eof) wst(i)%name, wst(i)%wco_c%wgn, wst(i)%lat, wst(i)%lon, wst(i)%elev, &
+                     wst(i)%pcp_factor, wst(i)%tmin_factor, wst(i)%tmax_factor, &
+                     wst(i)%slr_factor, wst(i)%hmd_factor, wst(i)%wnd_factor, &
+                     wst(i)%wco_c%petgage
+               end if
                if (eof < 0) exit
                wst_n(i) = wst(i)%name
                if (db_mx%wgnsta > 0) call search (wgn_n, db_mx%wgnsta, wst(i)%wco_c%wgn, wst(i)%wco%wgn)

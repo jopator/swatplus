@@ -139,6 +139,11 @@
         real :: hmd_factor = 1.            ! none        |relative humidity unit conversion factor
         real :: wnd_factor = 1.            ! none        |wind unit conversion factor
         real :: pet_factor = 1.            ! none        |potential ET unit conversion factor
+        ! Atmospheric deposition scale factors
+        real :: nh4_rf_factor = 1.         ! none        |ammonium in rainfall scale factor
+        real :: no3_rf_factor = 1.         ! none        |nitrate in rainfall scale factor
+        real :: nh4_dry_factor = 1.        ! none        |ammonium dry deposition scale factor
+        real :: no3_dry_factor = 1.        ! none        |nitrate dry deposition scale factor
 
         type (weather_daily) :: weat
         real :: precip_aa = 0.              ! mm         |average annual precipitation
