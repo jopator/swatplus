@@ -33,6 +33,7 @@ subroutine cli_ncdf_read_atmodep
 
     integer :: ref_year, ref_month, ref_day
     integer :: yr_init, mo_init, dy_init
+    integer :: yr_end, mo_end, dy_end
     integer :: iwst, it, ilat, ilon, start_idx
     logical :: exists
 
@@ -108,8 +109,11 @@ subroutine cli_ncdf_read_atmodep
         stop
     end if
 
+    ! Decode both ends of the file's own time axis, the way cli_ncdf_meas does.
     call add_days_to_date(ref_year, ref_month, ref_day, int(time_vals(1)), &
                           yr_init, mo_init, dy_init)
+    call add_days_to_date(ref_year, ref_month, ref_day, int(time_vals(ntime)), &
+                          yr_end, mo_end, dy_end)
 
     atmodep_cont%timestep = classify_timestep(time_vals, ntime)
     if (atmodep_cont%timestep == "??") then
@@ -133,12 +137,12 @@ subroutine cli_ncdf_read_atmodep
     atmodep_cont%ts    = start_idx
     atmodep_cont%first = 0
 
-    write (*,'(a,a,a,i0,a,i4.4,a,i2.2)')                                      &
-        " deposition record: timestep ", trim(atmodep_cont%timestep),         &
-        ", ", ntime, " steps from ", yr_init, "-", mo_init
-    write (9003,'(a,a,a,i0,a,i4.4,a,i2.2)')                                   &
-        " deposition record: timestep ", trim(atmodep_cont%timestep),         &
-        ", ", ntime, " steps from ", yr_init, "-", mo_init
+    write (*,'(a,i4.4,a,i2.2,a,i4.4,a,i2.2)')                                 &
+        " netcdf atmodep record: ", yr_init, "-", mo_init,                    &
+        " to ", yr_end, "-", mo_end
+    write (9003,'(a,i4.4,a,i2.2,a,i4.4,a,i2.2)')                              &
+        " netcdf atmodep record: ", yr_init, "-", mo_init,                    &
+        " to ", yr_end, "-", mo_end
 
     if (start_idx < 1 .or. start_idx > ntime) then
         write (*,*) "! warning: simulation period lies outside the deposition record;"

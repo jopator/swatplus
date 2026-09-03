@@ -130,7 +130,7 @@
         integer(c_int) :: ncid, status
         character(len=257, kind=c_char) :: path_c
         logical :: exists
-        integer :: k
+        integer :: k, nrec
 
         inquire (file=trim(recall_ncdf_file), exist=exists)
         if (.not. exists) call fail ("no recall netCDF at " // trim(recall_ncdf_file), 0)
@@ -166,8 +166,18 @@
 
         loaded = .true.
 
-        write (*,'(a,i0,a,a)') " recall: read ", nrow, " rows from ", trim(recall_ncdf_file)
-        write (9003,'(a,i0,a,a)') " recall: read ", nrow, " rows from ", trim(recall_ncdf_file)
+        !! rows are sorted by id, so a record starts wherever the id changes
+        nrec = 0
+        do k = 1, nrow
+          if (k == 1) then
+            nrec = 1
+          else if (id_v(k) /= id_v(k-1)) then
+            nrec = nrec + 1
+          end if
+        end do
+
+        write (*,'(a,i0,a,a)') " recall: read ", nrec, " records from ", trim(recall_ncdf_file)
+        write (9003,'(a,i0,a,a)') " recall: read ", nrec, " records from ", trim(recall_ncdf_file)
 
       end subroutine open_and_read
 
