@@ -4,7 +4,11 @@
       use maximum_data_module
       use recall_module
       use hydrograph_module
-      
+      use recall_ncdf_util
+#ifdef USE_NETCDF
+      use recall_ncdf_module
+#endif
+
       implicit none
       
       character (len=80) :: titldum = ""
@@ -56,7 +60,20 @@
                                      recall_db(i)%hmet, recall_db(i)%salt,     &
                                      recall_db(i)%constit
         if (eof < 0) exit
-                  
+
+        !! First detect if recall_db.rec refers to an orgmin netcdf file and that all records have a unique file 
+        if (ii == 1) then
+          call recall_ncdf_detect (recall_db(i)%org_min%name)
+        else if (recall_ncdf_active) then
+          if (trim(recall_db(i)%org_min%name) /= trim(recall_ncdf_file)) then
+            write (*,*) "! error: recall_db.rec mixes org_min files. The first row names ", trim(recall_ncdf_file), " but ", &
+              trim(recall_db(i)%name)," names ", trim(recall_db(i)%org_min%name)
+
+            write (9003,*) "! error: recall_db.rec mixes org_min files"
+            stop
+          end if
+        end if
+
         !! read all organic mineral files
         call recall_read (i)
       end do
@@ -64,7 +81,12 @@
     end do
     end if
     close (107)
-      
+
+    !! every record has been read, so the cached table can go
+#ifdef USE_NETCDF
+    if (recall_ncdf_active) call recall_ncdf_free
+#endif
+
     end subroutine recalldb_read
     
 
@@ -78,8 +100,12 @@
       use time_module
       use exco_module
       use recall_module
-      
-      implicit none    
+      use recall_ncdf_util
+#ifdef USE_NETCDF
+      use recall_ncdf_module
+#endif
+
+      implicit none
       
       external :: search
       
@@ -117,115 +143,132 @@
       istep = 0
       idaystep = 0
 
-      do 
-        open (108,file = recall_db(irec)%org_min%name)
-        read (108,*,iostat=eof) titldum
-        if (eof < 0) exit
-        read (108,*,iostat=eof) nbyr
-        if (eof < 0) exit
-        read (108,*,iostat=eof) header
-        exit 
-      end do
-        
-      !! check if the org mineral has already been used in a previous recall object
-      do iprev = 1, irec
-        if (recall_db(iprev)%org_min%name == recall_db(irec)%org_min%name) then
-          recall_db(irec)%iorg_min = iprev
-          exit
-        end if
-      end do
-          
-      !! if new org mineral, then read
-      if (recall_db(irec)%iorg_min == irec) then
-                
-        select case (recall_db(irec)%org_min%tstep)
-            
-          case ("sub") !! subdaily
-            allocate (recall(irec)%hyd_flo(time%step*366,time%nbyr), source = 0.)
-            allocate (recall(irec)%hd(366,time%nbyr))
-            
-          case ("day") !! daily
-            allocate (recall(irec)%hd(366,time%nbyr))
-            
-          case ("mo") !! monthly
-            allocate (recall(irec)%hd(12,time%nbyr))
-            
-          case ("yr") !! yearly
-            allocate (recall(irec)%hd(1,time%nbyr))
+      if (recall_ncdf_active) then
+        !! if the check on the recalldb_read subroutine made recall_ncdf_active true, we load the netcdf data
+#ifdef USE_NETCDF
+        call recall_ncdf_load (irec)
+#else
+  
+        write (*,*) "! error: recall_db.rec names ", trim(recall_ncdf_file), ", but this build has no netCDF support."
+        write (*,*) "         Rebuild with -DENABLE_NETCDF=ON, or use per-object .rec files."
+        write (9003,*) "! error: recall netCDF named but netCDF support is disabled"
+        stop
+#endif
 
-        end select 
-        
-        !! save starting year of recall data
-        read (108,*,iostat=eof) jday, mo, day_mo, iyr
-        recall(irec)%start_yr = iyr
-        backspace (108)
-        
-        !! set start year if recall starts before start of simulation
-        if (recall(irec)%start_yr <= time%yrc) then
-          iyrs = 1
-          do
-            read (108,*,iostat=eof) jday, mo, day_mo, iyr
-            if (iyr == time%yrc)  then
-              exit
-            end if
-          end do
-          backspace (108)
-        else
-          !! seet star year if recall starts after start of  simulation
-          iyrs = recall(irec)%start_yr - time%yrc + 1
-        end if
-        
-        !! read and store data
-        do 
-          iyr1 = iyr
-          read (108,*,iostat=eof) jday1, mo1, day_mo, iyr
+      else
+
+        do
+          open (108,file = recall_db(irec)%org_min%name)
+          read (108,*,iostat=eof) titldum
           if (eof < 0) exit
-          if (iyr > time%yrc_end) exit
+          read (108,*,iostat=eof) nbyr
+          if (eof < 0) exit
+          read (108,*,iostat=eof) header
+          exit 
+        end do
+          
+        !! check if the org mineral has already been used in a previous recall object
+        do iprev = 1, irec
+          if (recall_db(iprev)%org_min%name == recall_db(irec)%org_min%name) then
+            recall_db(irec)%iorg_min = iprev
+            exit
+          end if
+        end do
+            
+        !! if new org mineral, then read
+        if (recall_db(irec)%iorg_min == irec) then
+                  
+          select case (recall_db(irec)%org_min%tstep)
+              
+            case ("sub") !! subdaily
+              allocate (recall(irec)%hyd_flo(time%step*366,time%nbyr), source = 0.)
+              allocate (recall(irec)%hd(366,time%nbyr))
+              
+            case ("day") !! daily
+              allocate (recall(irec)%hd(366,time%nbyr))
+              
+            case ("mo") !! monthly
+              allocate (recall(irec)%hd(12,time%nbyr))
+              
+            case ("yr") !! yearly
+              allocate (recall(irec)%hd(1,time%nbyr))
+
+          end select 
+          
+          !! save starting year of recall data
+          read (108,*,iostat=eof) jday, mo, day_mo, iyr
+          recall(irec)%start_yr = iyr
           backspace (108)
           
-            !! increment iyrs (sequential year of recall data) if next year
-            if (iyr1 /= iyr) then
-              iyrs = iyrs + 1
-            end if
-            iyr1 = iyr
-          
-          !! read data for each time step
-          select case (recall_db(irec)%org_min%tstep)
-            case ("sub") !! subdaily
-              !! convert m3/s -> m3
-              recall(irec)%hyd_flo(istep,iyrs) = ht1%flo * 86400. / time%step
-              
-              !! reset daily step and sum the daily hyd
-              if (istep > idaystep * time%step) then
-                !! convert daily flow m3/s -> m3 -- other subdaily inputs are in t and kg
-                !recall(i)%hd(idaystep,iyrs)%flo = recall(i)%hd(idaystep,iyrs)%flo * 86400. / time%step
-                idaystep = idaystep + 1
-                recall(irec)%hd(idaystep,iyrs) = recall(irec)%hd(idaystep,iyrs) + ht1
-              else
-                recall(irec)%hd(idaystep,iyrs) = recall(irec)%hd(idaystep,iyrs) + ht1
+          !! set start year if recall starts before start of simulation
+          if (recall(irec)%start_yr <= time%yrc) then
+            iyrs = 1
+            do
+              read (108,*,iostat=eof) jday, mo, day_mo, iyr
+              if (iyr == time%yrc)  then
+                exit
               end if
-           
-            case ("day") !! daily
-              read (108,*,iostat=eof) jday, mo, day_mo, iyr, ob_typ, ob_name,    &
-                                                      recall(irec)%hd(jday1,iyrs)
-            case ("mo") !! monthly
-              read (108,*,iostat=eof) jday, mo, day_mo, iyr, ob_typ, ob_name,    &
-                                                      recall(irec)%hd(mo1,iyrs)
-              write (10108,*) jday, mo, day_mo, iyr, ob_typ, ob_name,    &
-                                                      recall(irec)%hd(mo1,iyrs)
-            case ("yr") !! yearly
-              read (108,*,iostat=eof) jday, mo, day_mo, iyr, ob_typ, ob_name, ht1
-              recall(irec)%hd(1,iyrs) = ht1
-            end select
+            end do
+            backspace (108)
+          else
+            !! seet star year if recall starts after start of  simulation
+            iyrs = recall(irec)%start_yr - time%yrc + 1
+          end if
+          
+          !! read and store data
+          do 
+            iyr1 = iyr
+            read (108,*,iostat=eof) jday1, mo1, day_mo, iyr
+            if (eof < 0) exit
+            if (iyr > time%yrc_end) exit
+            backspace (108)
             
-        end do    !! read and store data
-        
-        !! save end year of recall data
-        recall(irec)%end_yr = iyr
-        close (108)
-        
-      end if    !! if new org mineral, then read
-      
+              !! increment iyrs (sequential year of recall data) if next year
+              if (iyr1 /= iyr) then
+                iyrs = iyrs + 1
+              end if
+              iyr1 = iyr
+            
+            !! read data for each time step
+            select case (recall_db(irec)%org_min%tstep)
+              case ("sub") !! subdaily
+                !! convert m3/s -> m3
+                recall(irec)%hyd_flo(istep,iyrs) = ht1%flo * 86400. / time%step
+                
+                !! reset daily step and sum the daily hyd
+                if (istep > idaystep * time%step) then
+                  !! convert daily flow m3/s -> m3 -- other subdaily inputs are in t and kg
+                  !recall(i)%hd(idaystep,iyrs)%flo = recall(i)%hd(idaystep,iyrs)%flo * 86400. / time%step
+                  idaystep = idaystep + 1
+                  recall(irec)%hd(idaystep,iyrs) = recall(irec)%hd(idaystep,iyrs) + ht1
+                else
+                  recall(irec)%hd(idaystep,iyrs) = recall(irec)%hd(idaystep,iyrs) + ht1
+                end if
+            
+              case ("day") !! daily
+                read (108,*,iostat=eof) jday, mo, day_mo, iyr, ob_typ, ob_name,    &
+                                                        recall(irec)%hd(jday1,iyrs)
+              case ("mo") !! monthly
+                read (108,*,iostat=eof) jday, mo, day_mo, iyr, ob_typ, ob_name,    &
+                                                        recall(irec)%hd(mo1,iyrs)
+                write (10108,*) jday, mo, day_mo, iyr, ob_typ, ob_name,    &
+                                                        recall(irec)%hd(mo1,iyrs)
+              case ("yr") !! yearly
+                read (108,*,iostat=eof) jday, mo, day_mo, iyr, ob_typ, ob_name, ht1
+                recall(irec)%hd(1,iyrs) = ht1
+              end select
+              
+          end do    !! read and store data
+          
+          !! save end year of recall data
+          recall(irec)%end_yr = iyr
+          close (108)
+          
+        end if
+
+      end if    !! netCDF or text org_min
+
+
       !read all rec_pest files
       inquire (file="pest.com", exist=i_exist)
       if (i_exist ) then

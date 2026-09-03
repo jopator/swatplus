@@ -67,6 +67,22 @@
               integer(c_int) :: nc_get_var_float_c
           end function
 
+          function nc_get_var_int_c(ncid, varid, ip) bind(c, name='nc_get_var_int')
+              import :: c_int
+              integer(c_int), value, intent(in) :: ncid
+              integer(c_int), value, intent(in) :: varid
+              integer(c_int), intent(out) :: ip(*)
+              integer(c_int) :: nc_get_var_int_c
+          end function
+
+          function nc_get_var_text_c(ncid, varid, ip) bind(c, name='nc_get_var_text')
+              import :: c_int, c_char
+              integer(c_int), value, intent(in) :: ncid
+              integer(c_int), value, intent(in) :: varid
+              character(kind=c_char), intent(out) :: ip(*)
+              integer(c_int) :: nc_get_var_text_c
+          end function
+
           function nc_get_att_text_c(ncid, varid, name, ip) bind(c, name='nc_get_att_text')
               import :: c_int, c_char
               integer(c_int), value, intent(in) :: ncid
