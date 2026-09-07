@@ -1,8 +1,8 @@
-{
+{   
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Ames_sub1",
+            "name": "mississippi_ds",
             "type": "cppdbg",
             "request": "launch",
             // Resolved by CMake Tools:
@@ -10,7 +10,94 @@
             "args": [],
             "stopAtEntry": false,
             // Change the following to where swatplus input data exists
-            "cwd": "${workspaceFolder}/workdata/Ames_sub1",
+            "cwd": "${workspaceFolder}/data/mississippi_downstream/TxtInOut",//"/home/jopato/Documents/PHD/coswat_model/pycoswat/mississippi_subregions/projects/model-setup/CoSWATv2.0.2/na-mississippi-d01/Scenarios/waterQuality/TxtInOut",//"/data/brussel/vo/000/bvo00033/vsc10883/Projects/pycoswat/mississippi_subregions/projects/model-setup/CoSWATv2.0.2/na-mississippi-d01/Scenarios/Default/TxtInOut", //"/data/brussel/vo/000/bvo00033/vsc10883/Projects/towardCoSWATv2/model/coswat_02_01/reference/america-mississippi/observed/20crv3-era5/NcInOut_lum",//"/data/brussel/vo/000/bvo00033/coswat_applications/coswat_water_quality_axa_dev/dev/landUse/test_region/europe-west-2040018840/NcInOut_landuse1", //"${workspaceFolder}/data/netCDF-climate",
+            "environment": [
+                {
+                    // add the directory where our target was built to the PATHs
+                    // it gets resolved by CMake Tools:
+                    "name": "PATH",
+                    "value": "${env:PATH}:${command:cmake.getLaunchTargetDirectory}"
+                }
+            ],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            // "preLaunchTask": "CMake: clean rebuild",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+                {
+            "name": "mississippi_ds_ncRec",
+            "type": "cppdbg",
+            "request": "launch",
+            // Resolved by CMake Tools:
+            "program": "${command:cmake.launchTargetPath}",
+            "args": [],
+            "stopAtEntry": false,
+            // Change the following to where swatplus input data exists
+            "cwd": "${workspaceFolder}/data/mississippi_downstream/rec_netcdf",
+            "environment": [
+                {
+                    // add the directory where our target was built to the PATHs
+                    // it gets resolved by CMake Tools:
+                    "name": "PATH",
+                    "value": "${env:PATH}:${command:cmake.getLaunchTargetDirectory}"
+                }
+            ],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            // "preLaunchTask": "CMake: clean rebuild",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
+            "name": "modelo_aruca",
+            "type": "cppdbg",
+            "request": "launch",
+            // Resolved by CMake Tools:
+            "program": "${command:cmake.launchTargetPath}",
+            "args": [],
+            "stopAtEntry": false,
+            // Change the following to where swatplus input data exists
+            "cwd": "/run/media/jopato/jopato_ssd/Modelo_swat_Aruca/",
+            "environment": [
+                {
+                    // add the directory where our target was built to the PATHs
+                    // it gets resolved by CMake Tools:
+                    "name": "PATH",
+                    "value": "${env:PATH}:${command:cmake.getLaunchTargetDirectory}"
+                }
+            ],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            // "preLaunchTask": "CMake: clean rebuild",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+                {
+            "name": "model_lien",
+            "type": "cppdbg",
+            "request": "launch",
+            // Resolved by CMake Tools:
+            "program": "${command:cmake.launchTargetPath}",
+            "args": [],
+            "stopAtEntry": false,
+            // Change the following to where swatplus input data exists
+            "cwd": "${workspaceFolder}/data/model_lien/TxtInOut_v62",
             "environment": [
                 {
                     // add the directory where our target was built to the PATHs
@@ -39,13 +126,23 @@
             "args": [],
             "stopAtEntry": false,
             // Change the following to where swatplus input data exists
-            "cwd": "${workspaceFolder}/workdata/my_data",
+            "cwd": "${workspaceFolder}/refdata/my_data",
+            // "environment": [
+            //     {
+            //         // add the directory where our target was built to the PATHs
+            //         // it gets resolved by CMake Tools:
+            //         "name": "PATH",
+            //         "value": "${env:PATH}:${command:cmake.getLaunchTargetDirectory}"
+            //     }
+            // ],
             "environment": [
                 {
-                    // add the directory where our target was built to the PATHs
-                    // it gets resolved by CMake Tools:
                     "name": "PATH",
                     "value": "${env:PATH}:${command:cmake.getLaunchTargetDirectory}"
+                },
+                {
+                    "name": "LD_LIBRARY_PATH",
+                    "value": "/apps/brussel/RL9/zen2-ib/software/intel-compilers/2025.1.1/compiler/2025.1/lib:${env:LD_LIBRARY_PATH}"
                 }
             ],
             "externalConsole": false,
@@ -59,5 +156,7 @@
                 }
             ]
         }
+        
     ]
+
 }
