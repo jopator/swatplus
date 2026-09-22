@@ -80,7 +80,8 @@
           end if
           call cli_bounds_check (pcp(ipg)%start_day, pcp(ipg)%start_yr,       &
                                 pcp(ipg)%end_day, pcp(ipg)%end_yr, out_bounds)
-          if (yrs_to_start > pcp(ipg)%end_yr - pcp(ipg)%start_yr + 1) out_bounds = "y"
+          ! if (yrs_to_start > pcp(ipg)%end_yr - pcp(ipg)%start_yr + 1) out_bounds = "y"
+          if (yrs_to_start > pcp(ipg)%nbyr) out_bounds = "y"
             
           if (pcp(ipg)%tstep > 0) then
             !! subdaily precip

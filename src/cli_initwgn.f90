@@ -129,7 +129,8 @@
       !! absolute value is taken of tan(lat) to convert southern hemisphere values to northern hemisphere
       !! the angular velocity of the earth's rotation, omega, = 15 deg/hr or 0.2618 rad/hr and 2/0.2618 = 7.6394
       x1 = .4348 * Abs(lattan)      
-      if (x1 < 1.) x2 = Acos(x1) 
+      ! if (x1 < 1.) x2 = Acos(x1)
+      x2 = Acos(Min(x1, 1.)) 
       wgn_pms(iwgn)%daylmn = 7.6394 * x2
 
       !! calculate day length threshold for dormancy

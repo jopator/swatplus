@@ -368,6 +368,27 @@
                 "CMAKE_Fortran_COMPILER": "ifort",
                 "ENABLE_NETCDF": "ON"
             }
+        },
+                {
+            "name": "ifx_release_linux_nc_hpc",
+            "displayName": "ifx release version with NetCDF for VSC-HPC",
+            "description": "Builds a ifx release executable for swatplus with NetCDF support for linux",
+            "binaryDir": "build/release_nc",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Linux"
+            },
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_INSTALL_PREFIX": "build/release_nc",
+                "CMAKE_Fortran_COMPILER": "/apps/brussel/RL9/zen2-ib/software/intel-compilers/2025.1.1/compiler/2025.1/bin/ifx",
+                "ENABLE_NETCDF": "ON",
+                "NETCDF_ROOT": "/apps/brussel/RL9/zen2-ib/software/netCDF/4.9.3-gompi-2025a",
+                "NETCDF_C_LIBRARY": "/apps/brussel/RL9/zen2-ib/software/netCDF/4.9.3-gompi-2025a/lib/libnetcdf.so",
+                "HDF5_HL_LIBRARY": "/apps/brussel/RL9/zen2-ib/software/HDF5/1.14.6-gompi-2025a/lib/libhdf5_hl.so",
+                "HDF5_LIBRARY": "/apps/brussel/RL9/zen2-ib/software/HDF5/1.14.6-gompi-2025a/lib/libhdf5.so"
+            }
         }
     ]
 }
