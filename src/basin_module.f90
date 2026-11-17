@@ -70,6 +70,11 @@
                                  !! 2 = Use epic tillage method to use if cswat = 2
                                  !! 3 = Use Kemanian tillage method to use if cswat = 2
                                  !! 4 = Use dndc tillage method to use if cswat = 2
+        integer :: lake_evap = 0 !! 0 = reservoir evaporation = evap_co * PET * area (original)
+                                 !! 1 = Penman with heat storage (McMahon et al. 2013, S10; Vardavas and Fountoulakis 1996),
+                                 !!     daily, with air2water lake surface temperature (Jose T 2026); evap_co not used;
+                                 !!     uses incoming longwave (netCDF 'lwr') if given, else FAO-56 net longwave;
+                                 !!     optional column in codes.bsn
 
       end type basin_control_codes
       type (basin_control_codes) :: bsn_cc

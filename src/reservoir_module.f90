@@ -32,6 +32,7 @@
         real :: prev_flo = 0                !m3     !previous days flow to smooth outflows
         real :: lag_up = 0                  !       !lag parameter for increasing outflow - prevents sudden jumps
         real :: lag_down = 0                !       !lag parameter for decreasing outflow - prevents sudden drops
+        real :: a_scale = 1.                !       !GLOBathy area scale so that area(pvol) = psa (1 if GLOBathy not used)
         real, dimension (:), allocatable :: kd      !           |aquatic mixing velocity (diffusion/dispersion)-using mol_wt
         real, dimension (:), allocatable :: aq_mix  ! m/day     |aquatic mixing velocity (diffusion/dispersion)-using mol_wt
 
@@ -47,7 +48,19 @@
         real, dimension(:), allocatable :: daily_demand_array       !m3     |Array to store daily irrigation demand for the month
         real :: d_irrig_day = 0.0                                   !m3     |Daily irrigation demand
         integer :: irrig_track = 0
-      end type reservoir          
+
+        !! Additions for lake evaporation with bsn_cc%lake_evap = 1 (Penman with heat storage + air2water Tw)    |Jose T 2026
+        real :: dep_mean = 0.                                       !m      |mean depth at principal spillway (pvol / psa)
+        real, dimension(6) :: a2w = 0.                              !       |air2water parameters a1..a6 (air2water.res, else Toffolon et al. 2014 depth regressions)
+        real, dimension(30) :: tw_hist = 4.                         !deg C  |tw of the last 30 days (ring buffer) for the heat storage term
+        integer :: tw_ihist = 1                                     !       |position of the oldest value in tw_hist
+        real :: tw = 4.                                             !deg C  |lake surface water temperature (air2water state)
+        real :: th = 4.                                             !deg C  |air2water reference temperature, max(4, running minimum of tw)
+        real :: ta_prev = -999.                                     !deg C  |mean air temperature of the previous day (-999 = not set yet)
+        real :: tw_m = 0.                                           !deg C  |sum of daily tw for monthly output
+        real :: tw_y = 0.                                           !deg C  |sum of monthly mean tw for yearly output
+        real :: tw_a = 0.                                           !deg C  |sum of yearly mean tw for average annual output
+      end type reservoir
       type (reservoir), dimension(:),allocatable :: res_ob
       
       type wetland

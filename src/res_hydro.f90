@@ -53,6 +53,7 @@
       real :: d_mon             = 0.00                                        !m3         |Monthly demand
       real :: beta              = 0.10                                        !none       |Environmental flow req coefficient
       real :: target_rel        = 0.                                          !m3         |Target release
+      real :: c_thr             = 0.5                                         !none       |Capacity ratio threshold (0.5 in Hanasaki 2006; from dtl fp)
 
 
       !! Jose T 2025 |  HYPE model for HP method
@@ -266,7 +267,7 @@
             case ("nonirr-h06")
                 !! Jose T | Time-variant parametric scheme [h06] (Hanazaki et al. 2006) for non-irrigation reservoirs
                 !! release as non-irrigation reservoir
-                smax                 = max(pvol_m3,evol_m3)
+                smax                 = pvol_m3                                                        ! Hanasaki capacity = principal volume (evol only sets the full-inflow release level)
                 alpha                = dtbl_res(id)%act(iac)%const
                 I_mon                = res_ob(jres)%I_mon_past(12*(res_ob(jres)%N_memory))            ! m3/day
                 res_ob(jres)%I_mean  = sum(res_ob(jres)%I_mon_past)/size(res_ob(jres)%I_mon_past)     ! Long term mean inflow from rolling window (m3/day)
@@ -292,17 +293,24 @@
                 !! Define release target
                 target_rel =  res_ob(jres)%I_mean
 
+                !! Capacity ratio threshold (0.5 in Hanasaki et al. 2006), optionally set in the dtl action file pointer
+                c_thr = 0.5
+                if (dtbl_res(id)%act(iac)%file_pointer /= "null" .and. dtbl_res(id)%act(iac)%file_pointer /= "") then
+                    read (dtbl_res(id)%act(iac)%file_pointer, *) c_thr
+                end if
+
                 !! Calculate release
-                if (res_ob(jres)%c_ratio >= 0.5) then
+                if (res_ob(jres)%c_ratio >= c_thr) then
                     ht2%flo = ht2%flo + er * target_rel
                 else
-                    ht2%flo = er*target_rel*(2*res_ob(jres)%c_ratio)**2 + (1-(2*res_ob(jres)%c_ratio)**2)*I_mon
+                    !! Hanasaki et al. (2006) use the inflow of the current month: daily equivalent = today's inflow
+                    ht2%flo = ht2%flo + er*target_rel*(res_ob(jres)%c_ratio/c_thr)**2 + (1-(res_ob(jres)%c_ratio/c_thr)**2)*ht1%flo
                 end if
 
             case ("irr-h06")
                 !! Jose T | Time-variant parametric scheme (Hanazaki et al. 2006) for irrigation reservoirs
                 !! release as irrigation reservoir
-                smax                 = max(pvol_m3,evol_m3)
+                smax                 = pvol_m3                                                        ! Hanasaki capacity = principal volume (evol only sets the full-inflow release level)
                 alpha                = dtbl_res(id)%act(iac)%const
                 beta                 = dtbl_res(id)%act(iac)%const2
                 I_mon                = res_ob(jres)%I_mon_past(12*(res_ob(jres)%N_memory))                ! m3/day
@@ -333,11 +341,18 @@
 
                 end if
 
+                !! Capacity ratio threshold (0.5 in Hanasaki et al. 2006), optionally set in the dtl action file pointer
+                c_thr = 0.5
+                if (dtbl_res(id)%act(iac)%file_pointer /= "null" .and. dtbl_res(id)%act(iac)%file_pointer /= "") then
+                    read (dtbl_res(id)%act(iac)%file_pointer, *) c_thr
+                end if
+
                 !! Calculate release
-                if (res_ob(jres)%c_ratio >= 0.5) then
+                if (res_ob(jres)%c_ratio >= c_thr) then
                     ht2%flo = ht2%flo + er * target_rel
                 else
-                    ht2%flo = er*target_rel*(2*res_ob(jres)%c_ratio)**2 + (1-(2*res_ob(jres)%c_ratio)**2)*I_mon
+                    !! Hanasaki et al. (2006) use the inflow of the current month: daily equivalent = today's inflow
+                    ht2%flo = ht2%flo + er*target_rel*(res_ob(jres)%c_ratio/c_thr)**2 + (1-(res_ob(jres)%c_ratio/c_thr)**2)*ht1%flo
                 end if
 
             case ("hydrop")

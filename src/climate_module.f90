@@ -87,6 +87,7 @@
         real :: rhum = 0.
         real :: dewpt = 0.
         real :: windsp = 0.
+        real :: lwrad = -99.                                !! MJ/m2/d      |incoming longwave radiation (netCDF 'lwr'; -99 = missing)  |Jose T 2026
         real :: pet = 0.0
         !real :: pet
         real :: wndir = 0.
@@ -202,6 +203,7 @@
       type (climate_measured_data), dimension(:), allocatable :: slr
       type (climate_measured_data), dimension(:), allocatable :: hmd
       type (climate_measured_data), dimension(:), allocatable :: wnd
+      type (climate_measured_data), dimension(:), allocatable :: lwr     !! incoming longwave (netCDF only)  |Jose T 2026
       type (climate_measured_data), dimension(:), allocatable :: petm
       
       type atmospheric_deposition

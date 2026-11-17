@@ -22,9 +22,39 @@
       real :: pvol_m3 = 0.
       real :: evol_m3 = 0.
       real :: dep = 0.
+      real :: stage = 0.              !m             |water level above lake bottom (GLOBathy)
       real :: weir_hgt = 0.
       real :: alpha_up = 0.
       real :: alpha_down = 0.
+      real, parameter :: pi2 = 6.2831853               !              |2 pi
+      real :: ta_d = 0.                                !deg C         |mean air temperature of the day
+      real :: t0 = 0.                                  !frac          |previous day as fraction of the year
+      real :: t1 = 0.                                  !frac          |current day as fraction of the year
+      real :: tw0 = 0.                                 !deg C         |lake surface temperature of the previous day
+      real :: tw1 = 0.                                 !deg C         |lake surface temperature of the day
+      real :: dd = 0.                                  !              |air2water normalized mixed layer depth (delta)
+      real :: pp = 0.                                  !deg C/d       |air2water heat flux term of the previous day
+      real :: tw30 = 0.                                !deg C         |lake surface temperature 30 days ago
+      real :: u2 = 0.                                  !m/s           |wind speed at 2 m (SWAT+ windsp)
+      real :: eas = 0.                                 !kPa           |saturation vapour pressure at air temperature
+      real :: eair = 0.                                !kPa           |actual vapour pressure of the air
+      real :: pres = 0.                                !kPa           |atmospheric pressure
+      real :: xlam = 0.                                !MJ/kg         |latent heat of vaporisation
+      real :: gma = 0.                                 !kPa/deg C     |psychrometric constant
+      real :: dlt = 0.                                 !kPa/deg C     |slope of the saturation vapour pressure curve at ta
+      real :: rnet = 0.                                !MJ/m2/d       |net radiation at the water surface
+      real :: rso = 0.                                 !MJ/m2/d       |clear-sky solar radiation (no lwr only)
+      real :: rnl = 0.                                 !MJ/m2/d       |FAO-56 net longwave radiation (no lwr only)
+      real :: area_km2 = 0.                            !km2           |lake surface area
+      real :: hmix = 0.                                !m             |heat storage depth: min(mean depth, wave base)
+      real :: dheat = 0.                               !MJ/m2/d       |net energy gained from heat storage
+      real :: tk = 0.                                  !K             |air temperature
+      real :: visc = 0.                                !m2/s          |kinematic viscosity of air
+      real :: ustar = 0.                               !m/s           |friction velocity
+      real :: cu = 0.                                  !mm/d/(m/s mbar)|wind coefficient (Vardavas 1987)
+      real :: ea_mm = 0.                               !mm/d          |evaporation component due to wind
+      real :: evap_mm = 0.                             !mm/d          |lake evaporation
+      integer :: it = 0                                !              |iteration counter
 
       integer :: dom            = 0                                           !           |Day of month
       integer :: mon            = 0                                           !           |Month of year
@@ -158,7 +188,76 @@
         endif 
         
         !! calculate water balance for day
-        res_wat_d(jres)%evap = 10. * res_hyd(jres)%evrsv * wst(iwst)%weat%pet * res_wat_d(jres)%area_ha
+        if (bsn_cc%lake_evap == 1) then
+          !! lake surface temperature tw: air2water, 6 parameters (Piccolroaz et al. 2013; Toffolon et al. 2014),
+          !! daily Crank-Nicolson step as in github.com/marcotoffolon/air2water (t in fraction of year, tw >= 0)   |Jose T 2026
+          ta_d = wst(iwst)%weat%tave
+          if (res_ob(jres)%ta_prev < -900.) res_ob(jres)%ta_prev = ta_d
+          t0 = float(time%day - 2) / float(time%day_end_yr)
+          t1 = float(time%day - 1) / float(time%day_end_yr)
+          tw0 = res_ob(jres)%tw
+          if (tw0 >= res_ob(jres)%th) then
+            dd = exp(-(tw0 - res_ob(jres)%th) / res_ob(jres)%a2w(4))
+          else
+            dd = 1.
+          end if
+          pp = res_ob(jres)%a2w(1) + res_ob(jres)%a2w(2) * res_ob(jres)%ta_prev - res_ob(jres)%a2w(3) * tw0          &
+               + res_ob(jres)%a2w(5) * cos(pi2 * (t0 - res_ob(jres)%a2w(6)))
+          tw1 = (2. * dd * tw0 + pp + res_ob(jres)%a2w(1) + res_ob(jres)%a2w(2) * ta_d                               &
+               + res_ob(jres)%a2w(5) * cos(pi2 * (t1 - res_ob(jres)%a2w(6)))) / (2. * dd + res_ob(jres)%a2w(3))
+          res_ob(jres)%tw = max(tw1, 0.)
+          res_ob(jres)%th = max(4., min(res_ob(jres)%th, res_ob(jres)%tw))
+          res_ob(jres)%ta_prev = ta_d
+
+          !! tw of 30 days ago (oldest value of the ring buffer), then store today's tw in its place
+          tw30 = res_ob(jres)%tw_hist(res_ob(jres)%tw_ihist)
+          res_ob(jres)%tw_hist(res_ob(jres)%tw_ihist) = res_ob(jres)%tw
+          res_ob(jres)%tw_ihist = mod(res_ob(jres)%tw_ihist, 30) + 1
+
+          !! Penman with heat storage, McMahon et al. (2013) S10.7-S10.16 (Vardavas and Fountoulakis 1996), run daily:
+          !!   E = D/(D+g) (Rn + dH)/lambda + g/(D+g) Ea
+          !!   Rn = (1 - 0.08) Rs + 0.97 Rld - 0.97 sigma (tw + 273.15)^4
+          !!   dH = -rho c h (tw - tw_30d) / 30,  h = min(mean depth, wave base 45.7 A^0.5 / (21.4 + A^0.5)) (Hakanson 2004)
+          !!   Ea = Cu u2 (es(ta) - ea), Cu from roughness lengths (S10.12-S10.16)
+          !! without incoming longwave (lwr): Rn = 0.92 Rs - Rnl (FAO-56 Eq. 39) - 4 sigma (ta + 273.15)^3 (tw - ta) (McMahon S11.7)
+          !! no evaporation from an ice-covered lake (air2water tw = 0)
+          if (res_ob(jres)%tw <= 0. .or. res_wat_d(jres)%area_ha <= 1.e-6) then
+            evap_mm = 0.
+          else
+            eas = 0.5 * (0.6108 * exp(17.27 * wst(iwst)%weat%tmax / (wst(iwst)%weat%tmax + 237.3))                     &
+                  + 0.6108 * exp(17.27 * wst(iwst)%weat%tmin / (wst(iwst)%weat%tmin + 237.3)))                       !kPa
+            eair = wst(iwst)%weat%rhum * eas                                                                        !kPa, FAO-56 Eq. 19
+            pres = 101.3 * ((293. - 0.0065 * ob(iob)%elev) / 293.) ** 5.26                                           !kPa, FAO-56 Eq. 7
+            xlam = 2.501 - 0.002361 * ta_d
+            gma = 0.00163 * pres / xlam
+            dlt = 4098. * 0.6108 * exp(17.27 * ta_d / (ta_d + 237.3)) / (ta_d + 237.3) ** 2
+            if (wst(iwst)%weat%lwrad > -97.) then
+              rnet = 0.92 * wst(iwst)%weat%solrad + 0.97 * wst(iwst)%weat%lwrad                                        &
+                     - 0.97 * 4.903e-9 * (res_ob(jres)%tw + 273.15) ** 4
+            else
+              rso = (0.75 + 2.e-5 * ob(iob)%elev) * wst(iwst)%weat%solradmx * 37.59 / 30.                             !FAO-56 Eq. 37
+              rnl = 4.903e-9 * 0.5 * ((wst(iwst)%weat%tmax + 273.16) ** 4 + (wst(iwst)%weat%tmin + 273.16) ** 4)        &
+                    * (0.34 - 0.14 * sqrt(eair)) * (1.35 * min(wst(iwst)%weat%solrad / max(rso, 1.e-6), 1.) - 0.35)
+              rnet = 0.92 * wst(iwst)%weat%solrad - rnl - 4. * 4.903e-9 * (ta_d + 273.15) ** 3 * (res_ob(jres)%tw - ta_d)
+            end if
+            area_km2 = res_wat_d(jres)%area_ha / 100.
+            hmix = min(res(jres)%flo / (res_wat_d(jres)%area_ha * 10000.), 45.7 * sqrt(area_km2) / (21.4 + sqrt(area_km2)))
+            dheat = -4.18 * hmix * (res_ob(jres)%tw - tw30) / 30.                                                    !rho c = 4.18 MJ m-3 K-1
+            u2 = max(wst(iwst)%weat%windsp, 0.1)
+            tk = ta_d + 273.15
+            visc = 2.964e-7 * tk ** 1.5 / pres
+            ustar = 0.05 * u2
+            do it = 1, 50
+              ustar = 0.41 * u2 / log(2. * ustar / (0.135 * visc))
+            end do
+            cu = 3966. / (tk * log(2. / (0.624 * visc / ustar)) * log(2. / (0.135 * visc / ustar)))
+            ea_mm = cu * u2 * 10. * (eas - eair)
+            evap_mm = max(0., dlt / (dlt + gma) * (rnet + dheat) / xlam + gma / (dlt + gma) * ea_mm)
+          end if
+          res_wat_d(jres)%evap = 10. * evap_mm * res_wat_d(jres)%area_ha                                             !m3
+        else
+          res_wat_d(jres)%evap = 10. * res_hyd(jres)%evrsv * wst(iwst)%weat%pet * res_wat_d(jres)%area_ha
+        end if
         res_wat_d(jres)%precip = 10. * wst(iwst)%weat%precip * res_wat_d(jres)%area_ha
         if(bsn_cc%gwflow == 0) then !if gwflow active, seepage calculated in gwflow_simulate (rtb gwflow)
           res_wat_d(jres)%seep = 240. * res_hyd(jres)%k * res_wat_d(jres)%area_ha
@@ -188,9 +287,14 @@
           res(jres)%flo = 0.
         end if
 
-        !! update surface area
+        !! update surface area - GLOBathy stage from volume, then area from stage (anchored to psa by a_scale); else br1/br2
         if (res(jres)%flo > 0.) then
-          res_wat_d(jres)%area_ha = res_ob(jres)%br1 * res(jres)%flo ** res_ob(jres)%br2
+          if (res_hyd(jres)%hA_a > 0. .and. res_hyd(jres)%hV_a > 0. .and. res_hyd(jres)%hV_b > 0.) then
+            stage = (res(jres)%flo * 1.e-9 / res_hyd(jres)%hV_a) ** (1. / res_hyd(jres)%hV_b)
+            res_wat_d(jres)%area_ha = res_ob(jres)%a_scale * 100. * res_hyd(jres)%hA_a * stage ** res_hyd(jres)%hA_b
+          else
+            res_wat_d(jres)%area_ha = res_ob(jres)%br1 * res(jres)%flo ** res_ob(jres)%br2
+          end if
         else
           res_wat_d(jres)%area_ha = 0.
         end if

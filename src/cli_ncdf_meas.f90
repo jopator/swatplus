@@ -31,12 +31,12 @@ subroutine cli_ncdf_meas
     
     ! NetCDF variable IDs
     integer(c_int) :: time_varid, lat_varid, lon_varid
-    integer(c_int) :: pcp_varid, tmin_varid, tmax_varid, slr_varid, hmd_varid, wnd_varid
-    
+    integer(c_int) :: pcp_varid, tmin_varid, tmax_varid, slr_varid, hmd_varid, wnd_varid, lwr_varid
+
     ! Arrays for reading ALL data
     real(c_float), dimension(:), allocatable :: time_vals, lat_vals, lon_vals
     real(c_float), dimension(:,:,:), allocatable :: pcp_data, tmin_data, tmax_data
-    real(c_float), dimension(:,:,:), allocatable :: slr_data, hmd_data, wnd_data
+    real(c_float), dimension(:,:,:), allocatable :: slr_data, hmd_data, wnd_data, lwr_data
     
     ! Variables for finding closest grid point
     integer :: target_lat_idx, target_lon_idx
@@ -138,6 +138,7 @@ subroutine cli_ncdf_meas
     allocate(time_vals(ntime), lat_vals(nlat), lon_vals(nlon))
     allocate(pcp_data(nlon, nlat, ntime), tmin_data(nlon, nlat, ntime), tmax_data(nlon, nlat, ntime))
     allocate(slr_data(nlon, nlat, ntime), hmd_data(nlon, nlat, ntime), wnd_data(nlon, nlat, ntime))
+    allocate(lwr_data(nlon, nlat, ntime))
     
     ! Read coordinate data
     status = nc_inq_varid_c(ncid, "lat" // c_null_char, lat_varid)
@@ -249,6 +250,21 @@ subroutine cli_ncdf_meas
     call read_climate_variable("hmd", hmd_varid, hmd_data, "humidity")
     call read_climate_variable("wnd", wnd_varid, wnd_data, "wind speed")
 
+    ! Incoming longwave radiation (MJ m-2 d-1) - optional, there is no generator for it; only needed by
+    ! the lake evaporation with bsn_cc%lake_evap = 1   |Jose T 2026
+    status = nc_inq_varid_c(ncid, "lwr" // c_null_char, lwr_varid)
+    if (status == NC_NOERR) then
+        status = nc_get_var_float_c(ncid, lwr_varid, lwr_data)
+        if (status /= NC_NOERR) then
+            write (*,*) "! error reading longwave radiation, code: ", status
+            write (9003,*) "! error reading longwave radiation, code: ", status
+            stop
+        endif
+    else
+        write (9003,*) "lwr (incoming longwave radiation) not found in NetCDF - lake evaporation uses FAO-56 net longwave"
+        lwr_data = -99.0
+    endif
+
     ! allocate and populate climate arrays
     allocate (pcp(0:db_mx%wst))
     allocate (pcp_n(db_mx%wst))
@@ -260,6 +276,7 @@ subroutine cli_ncdf_meas
     allocate (hmd_n(db_mx%wst))
     allocate (wnd(0:db_mx%wst))
     allocate (wnd_n(db_mx%wst))
+    allocate (lwr(0:db_mx%wst))
     db_mx%pcpfiles = db_mx%wst
     db_mx%tmpfiles = db_mx%wst  
     db_mx%slrfiles = db_mx%wst
@@ -313,7 +330,7 @@ subroutine cli_ncdf_meas
     
     ! Clean up allocated arrays
     deallocate(time_vals, lat_vals, lon_vals)
-    deallocate(pcp_data, tmin_data, tmax_data, slr_data, hmd_data, wnd_data)
+    deallocate(pcp_data, tmin_data, tmax_data, slr_data, hmd_data, wnd_data, lwr_data)
     
     write(*,'(A,I0,A)') " successfully populated time series for ", db_mx%wst, " stations"
     write(9003,'(A,I0,A)') " successfully populated time series for ", db_mx%wst, " stations"
@@ -527,6 +544,13 @@ contains
         wnd(iwst)%end_day = pcp(iwst)%end_day
         wnd(iwst)%yrs_start = pcp(iwst)%yrs_start
 
+        lwr(iwst)%nbyr = nbyr_nc
+        lwr(iwst)%start_yr = pcp(iwst)%start_yr
+        lwr(iwst)%end_yr = pcp(iwst)%end_yr
+        lwr(iwst)%start_day = pcp(iwst)%start_day
+        lwr(iwst)%end_day = pcp(iwst)%end_day
+        lwr(iwst)%yrs_start = pcp(iwst)%yrs_start
+
         ! Allocate time series arrays.
         ! Seed with -99. (SWAT+ "missing, generate instead") rather than 0., so
         ! that days the netCDF file does not cover -- a partial first or last
@@ -538,6 +562,7 @@ contains
         allocate (slr(iwst)%ts(366, nbyr_nc), source = -99.)
         allocate (hmd(iwst)%ts(366, nbyr_nc), source = -99.)
         allocate (wnd(iwst)%ts(366, nbyr_nc), source = -99.)
+        allocate (lwr(iwst)%ts(366, nbyr_nc), source = -99.)
 
     end subroutine setup_timeseries_arrays
     
@@ -592,6 +617,11 @@ contains
             wnd(iwst)%ts(iday, iyear) = nc_value(                             &
                 wnd_data(target_lon_idx, target_lat_idx, itime),              &
                 wst(iwst)%wnd_factor, 0., NO_LIMIT)
+
+            ! Incoming longwave radiation (no scaling factor)
+            lwr(iwst)%ts(iday, iyear) = nc_value(                             &
+                lwr_data(target_lon_idx, target_lat_idx, itime),              &
+                1., 0., NO_LIMIT)
         end do
 
     end subroutine populate_timeseries_data

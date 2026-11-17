@@ -160,7 +160,21 @@
             wnd(ig)%days_gen = wnd(ig)%days_gen + 1
           end if
         end if
-      end do 
+      end do
+
+!! Incoming longwave radiation: netCDF only (lwr(i) belongs to station i), no generator; -99 = missing   |Jose T 2026
+      do iwst = 1, db_mx%wst
+        wst(iwst)%weat%lwrad = -99.
+        if (allocated(lwr)) then
+          out_bounds = "n"
+          call cli_bounds_check (lwr(iwst)%start_day, lwr(iwst)%start_yr,       &
+                                lwr(iwst)%end_day, lwr(iwst)%end_yr, out_bounds)
+          if (out_bounds == "n") then
+            yrs_to_start = time%yrs - lwr(iwst)%yrs_start
+            wst(iwst)%weat%lwrad = lwr(iwst)%ts(time%day,yrs_to_start)
+          end if
+        end if
+      end do
 
 !! Potential ET: Read in data !!
       do iwst = 1, db_mx%wst

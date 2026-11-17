@@ -8,6 +8,9 @@
        character (len=80) :: titldum = "" !             |title of file
        character (len=80) :: header = ""  !             |header
        integer :: eof = 0               !             |end of file
+       integer :: ios = 0               !             |read status with optional lake_evap column
+       character (len=1000) :: line = ""!             |record of codes.bsn
+       character (len=1010) :: line2 = ""!            |record of codes.bsn with lake_evap = 0 appended
        logical :: i_exist               !             |check to determine if file exists
        
        eof = 0
@@ -21,8 +24,18 @@
          if (eof < 0) exit
          read (107,*,iostat=eof) header
          if (eof < 0) exit
-         read (107,*,iostat=eof) bsn_cc
-         if (eof < 0) exit
+         read (107,'(a)',iostat=eof) line
+         if (eof < 0 .and. len_trim(line) == 0) exit
+         !! idc_till and lake_evap (last two columns) are optional - missing ones get their defaults (idc_till = 3, lake_evap = 0)
+         read (line,*,iostat=ios) bsn_cc
+         if (ios /= 0) then
+           line2 = trim(line) // " 0"
+           read (line2,*,iostat=ios) bsn_cc
+         end if
+         if (ios /= 0) then
+           line2 = trim(line) // " 3 0"
+           read (line2,*,iostat=eof) bsn_cc
+         end if
          exit
        enddo
        endif

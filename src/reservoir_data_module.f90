@@ -75,6 +75,10 @@
         real :: evrsv = .7        !none          |lake evap coeff
         real :: br1 = 0.          !none          |vol-surface area coefficient for reservoirs (model estimates if zero)
         real :: br2 = 0.          !none          |vol-surface area coefficient for reservoirs (model estimates if zero)
+        real :: hA_a = 0.         !km2 m^-hA_b   |GLOBathy stage-area coeff: A(km2) = hA_a * h(m)**hA_b (br1/br2 used if zero)
+        real :: hA_b = 0.         !none          |GLOBathy stage-area exponent
+        real :: hV_a = 0.         !km3 m^-hV_b   |GLOBathy stage-volume coeff: V(km3) = hV_a * h(m)**hV_b (br1/br2 used if zero)
+        real :: hV_b = 0.         !none          |GLOBathy stage-volume exponent
       end type reservoir_hyd_data
       type (reservoir_hyd_data), dimension(:), allocatable :: res_hyd
       type (reservoir_hyd_data), dimension(:), allocatable :: res_hyddb

@@ -13,7 +13,9 @@
       integer :: imax = 0               !             |determine max number for array (imax) and total number in file
       logical :: i_exist                !none         |check to determine if file exists
       integer :: ires = 0               !none         |counter
-      
+      integer :: ios = 0                !none         |read status of optional GLOBathy columns
+      character (len=1000) :: line = "" !none         |record of hydrology.res
+
       eof = 0
       imax = 0
 
@@ -46,8 +48,20 @@
          
          !read (105,*,iostat=eof) titldum
          !backspace (105)
-         read (105,*,iostat=eof) res_hyddb(ires)
-         if (eof < 0) exit
+         read (105,'(a)',iostat=eof) line
+         if (eof < 0 .and. len_trim(line) == 0) exit
+
+         !! GLOBathy columns (hA_a hA_b hV_a hV_b) are optional - files without them are read as before
+         read (line,*,iostat=ios) res_hyddb(ires)
+         if (ios /= 0) then
+           read (line,*) res_hyddb(ires)%name, res_hyddb(ires)%iyres, res_hyddb(ires)%mores,          &
+             res_hyddb(ires)%psa, res_hyddb(ires)%pvol, res_hyddb(ires)%esa, res_hyddb(ires)%evol,    &
+             res_hyddb(ires)%k, res_hyddb(ires)%evrsv, res_hyddb(ires)%br1, res_hyddb(ires)%br2
+           res_hyddb(ires)%hA_a = 0.
+           res_hyddb(ires)%hA_b = 0.
+           res_hyddb(ires)%hV_a = 0.
+           res_hyddb(ires)%hV_b = 0.
+         end if
 
         if (res_hyddb(ires)%pvol + res_hyddb(ires)%evol > 0.) then
           if(res_hyddb(ires)%pvol <= 0) res_hyddb(ires)%pvol = 0.9 * res_hyddb(ires)%evol
