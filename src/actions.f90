@@ -74,6 +74,9 @@
       integer :: iplt = 0
       integer :: num_plts_cur = 0
       integer :: hru_rcv
+      integer, save :: fr_upd_yr = 0       !         |year of last hru_fr_update (basin-wide, apply once per day)   JT
+      integer, save :: fr_upd_day = 0      !         |day of last hru_fr_update                                     JT
+      character(len=40), save :: fr_upd_file = ""  ! |lsu_unit.ele file of last hru_fr_update                     JT
       real :: hiad1 = 0.                   !         |
       real :: biomass = 0.                 !         |
       real :: frt_kg = 0.
@@ -991,10 +994,17 @@
           !hru area fraction change - update lsu_unit.ele and rout_unit.ele
           case ("hru_fr_update")
             !"option" is the updated lsu_unit.ele and "file_pointer" is rout_unit.ele
-            call hru_fr_change (d_tbl%act(iac)%option, d_tbl%act(iac)%file_pointer)
-            !! write to new landuse change file
-            write (3612,*) j, time%yrc, time%mo, time%day_mo,  "   HRU_FRACTION_CHANGE ",        &
+            !! basin-wide update - dtbl is looped over all hrus, so only apply once per day   JT
+            if (time%yrc /= fr_upd_yr .or. time%day /= fr_upd_day .or.                  &
+                                     d_tbl%act(iac)%option /= fr_upd_file) then
+              fr_upd_yr = time%yrc
+              fr_upd_day = time%day
+              fr_upd_file = d_tbl%act(iac)%option
+              call hru_fr_change (d_tbl%act(iac)%option, d_tbl%act(iac)%file_pointer)
+              !! write to new landuse change file
+              write (3612,*) j, time%yrc, time%mo, time%day_mo,  "   HRU_FRACTION_CHANGE ",      &
                     d_tbl%act(iac)%option, d_tbl%act(iac)%file_pointer, "   0   0"
+            end if
                             
           !land use change - total land use and management change
           case ("lu_change")

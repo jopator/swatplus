@@ -69,6 +69,7 @@
       integer :: idp = 0             !              |
       integer :: iplt = 0
       integer :: iupd = 0            !none          |counter
+      integer :: jmx = 0             !none          |number of hrus to evaluate scenario dtbl for   JT
       integer :: ipest = 0           !none          |counter
       integer :: date_time(8) = 0    !              | 
       character*10 b(3)              !              |
@@ -233,7 +234,10 @@
           do iupd = 1, db_mx%cond_up
             id = upd_cond(iupd)%cond_num
             d_tbl => dtbl_scen(id)
-            do j = 1, sp_ob%hru
+            !! basin-wide tables (only hru_fr_update actions) - evaluate once, not per hru   JT
+            jmx = sp_ob%hru
+            if (all(d_tbl%act(:)%typ == "hru_fr_update")) jmx = min(1, sp_ob%hru)
+            do j = 1, jmx
               call conditions (j, id)
               call actions (j, iob, id)
             end do
