@@ -267,7 +267,8 @@
      
         factk = - rk2_k
         bc2_k = -Theta (ch_nut(jnut)%bc2, thbc2, wtmp)
-        bc1_m = wq_k2m (tday, rt_delt, factk, ht3%nh3, ammoin)
+        !! NH3 -> NO2 at the nitrification rate bc1 (was factk = -rk2_k, the reaeration rate)
+        bc1_m = wq_k2m (tday, rt_delt, -bc1_k, ht3%nh3, ammoin)
         bc2_m = wq_k2m (tday, rt_delt, bc2_k, ht3%no2, ht3%no2)
         factm = rk1_m + rk2_m - rs4_k + bc1_m * ch_nut(jnut)%ai5 + bc2_m * ch_nut(jnut)%ai6
         ht3%dox = wq_semianalyt (tday, rt_delt, factm, factk, ht3%dox, ht3%dox)
