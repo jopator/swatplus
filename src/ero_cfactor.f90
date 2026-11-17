@@ -48,7 +48,8 @@
       
       j = ihru
 
-      bsn_cc%cfac = 1
+      !! method from codes.bsn c_fact (0 = plant usle_c_min with cover, 1 = residue, biomass and canopy height) - was
+      !! hardcoded to 1, which ignores usle_c_min (Jose T 2026)
       !! HRU sediment calculations
       if (bsn_cc%cfac == 0) then
         !! old method using minimum c factor (average of each plant in community)
@@ -88,4 +89,4 @@
       usle_cfac(ihru) = c
       
       return
-      end subroutine ero_cfactor
+      end subroutine ero_cfactor
