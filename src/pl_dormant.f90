@@ -18,6 +18,7 @@
       integer :: iwgn = 0           !              |
       real :: rto = 0.              !              |
       real :: lai_init = 0.         !
+      real :: leaf_frac = 0.        !frac          |share of the leaf mass dropped at the start of dormancy
 
       j = ihru
       idp = pcom(j)%plcur(ipl)%idplt
@@ -34,15 +35,17 @@
           !! add dead stem mass to residue pool
           rto = 0. !***jga  pldb(idp)%bm_dieoff
           stem_drop = rto * pl_mass(j)%stem(ipl)
-          !! lower lai by same ratio
+          !! lower lai to the minimum winter lai (plants.plt lai_min; never raised) - was rto * lai_init = 0 (Jose T 2026)
           lai_init = pcom(j)%plg(ipl)%lai
-          pcom(j)%plg(ipl)%lai = rto * lai_init
-          !! compute leaf biomass drop
-          leaf_drop%m = rto * pl_mass(j)%leaf(ipl)%m
-          leaf_drop%n = leaf_drop%m * pcom(j)%plm(ipl)%n_fr
-          leaf_drop%n = max (0., leaf_drop%n)
-          leaf_drop%p = leaf_drop%m * pcom(j)%plm(ipl)%p_fr
-          leaf_drop%p = max (0., leaf_drop%p)
+          pcom(j)%plg(ipl)%lai = min (lai_init, pldb(idp)%alai_min)
+          !! leaves lost with the lai decline fall to the surface residue (same share of the leaf pool)
+          if (lai_init > 1.e-6) then
+            leaf_frac = 1. - pcom(j)%plg(ipl)%lai / lai_init
+          else
+            leaf_frac = 0.
+          end if
+          leaf_frac = max (0., min (1., leaf_frac))
+          leaf_drop = leaf_frac * pl_mass(j)%leaf(ipl)
           !! add all seed/fruit mass to residue pool
           seed_drop = pl_mass(j)%seed(ipl)
           abgr_drop = stem_drop + leaf_drop + seed_drop
