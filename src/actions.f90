@@ -214,8 +214,8 @@
             j = ob_cur                      ! hru number
             !select object type
             iob = d_tbl%act(iac)%ob_num
-            res_ob(iob)%d_irrig_day = d_tbl%act(iac)%const * irrig(j)%demand  !const is equal to the % of the demand that corresponds to that res
-            res_ob(iob)%irrig_track = res_ob(iob)%irrig_track + 1             ! Tracker to update irrigation demand
+            !! sum of the demands of all hrus irrigating from the reservoir that day; used once and reset in res_control   |Jose T 2026
+            res_ob(iob)%d_irrig_day = res_ob(iob)%d_irrig_day + d_tbl%act(iac)%const * irrig(j)%demand  !const is equal to the % of the demand that corresponds to that res
 
 
           !irrigate demand - water allocation action - only irrigates if adequate water is available

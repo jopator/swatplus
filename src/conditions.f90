@@ -351,6 +351,15 @@
           ivar_tbl = int(d_tbl%cond(ic)%lim_const)
           call cond_integer (ic, ivar_cur, ivar_tbl)
                   
+        !years of inflow memory recorded by a reservoir since it became operational (yr_op): the dtl switch from
+        !the natural lake release to Hanasaki, also for reservoirs built during the simulation   |Jose T 2026
+        case ("mem_yrs")
+          ob_num = d_tbl%cond(ic)%ob_num
+          if (ob_num == 0) ob_num = ob_cur
+          ivar_cur = res_ob(ob_num)%n_mem_mon / 12
+          ivar_tbl = int(d_tbl%cond(ic)%lim_const)
+          call cond_integer (ic, ivar_cur, ivar_tbl)
+
         !sequential year of simulation
         case ("year_start")
           ivar_cur = time%yrc_start

@@ -41,13 +41,13 @@
         real :: I_mean  = 0.                                        !m3     |Annual mean inflow for the last N years
         real :: S_ini   = 0.                                        !m3     |Storage at the beginning of the operational year
         integer :: N_memory   = 5                                   !m3     |Number of years in the memory (by default 1 year)
+        integer :: n_mem_mon  = 0                                   !months |Months of inflow memory recorded since the res became operational (max 12*N_memory)   |Jose T 2026
         real, dimension(:), allocatable :: daily_inflow_array       !m3     |Array to store daily inflow for the month
         real :: c_ratio   = 0.51                                    !       |Capacity ratio
         real :: d_mean    = 0.0                                     !m3     |Annual mean irrigation demand
         real, dimension(:), allocatable :: d_mon_past               !m3     |Monthly mean irrigation demand for the last N*12 months
         real, dimension(:), allocatable :: daily_demand_array       !m3     |Array to store daily irrigation demand for the month
         real :: d_irrig_day = 0.0                                   !m3     |Daily irrigation demand
-        integer :: irrig_track = 0
 
         !! Additions for lake evaporation with bsn_cc%lake_evap = 1 (Penman with heat storage + air2water Tw)    |Jose T 2026
         real :: dep_mean = 0.                                       !m      |mean depth at principal spillway (pvol / psa)

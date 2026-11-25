@@ -272,7 +272,15 @@
                 I_mon                = res_ob(jres)%I_mon_past(12*(res_ob(jres)%N_memory))            ! m3/day
                 res_ob(jres)%I_mean  = sum(res_ob(jres)%I_mon_past)/size(res_ob(jres)%I_mon_past)     ! Long term mean inflow from rolling window (m3/day)
 
-                res_ob(jres)%c_ratio = smax/(res_ob(jres)%I_mean*365.25)                              ! Update capacity ratio
+                if (res_ob(jres)%I_mean > 1.e-6) then                                                     ! Jose T 2026: no division by a zero mean inflow
+
+                    res_ob(jres)%c_ratio = smax/(res_ob(jres)%I_mean*365.25)                              ! Update capacity ratio
+
+                else
+
+                    res_ob(jres)%c_ratio = 1.e6                                                           ! No inflow: storage based release only
+
+                end if
 
                 !! Verify if new operational year is starting
                 if (dom == 1) then                                                                    ! This update only occurs at the beginning of the month
@@ -317,7 +325,11 @@
                 d_mon                = res_ob(jres)%d_mon_past(12*(res_ob(jres)%N_memory))                ! m3/day
                 res_ob(jres)%I_mean  = sum(res_ob(jres)%I_mon_past)/size(res_ob(jres)%I_mon_past)         ! Long term mean inflow from rolling window (m3/day)
                 res_ob(jres)%d_mean  = sum(res_ob(jres)%d_mon_past)/size(res_ob(jres)%d_mon_past)         ! Long term mean demand from rolling window (m3/day)
-                res_ob(jres)%c_ratio = smax/(res_ob(jres)%I_mean*365.25)                                  ! Update capacity ratio
+                if (res_ob(jres)%I_mean > 1.e-6) then                                                     ! Jose T 2026: no division by a zero mean inflow
+                    res_ob(jres)%c_ratio = smax/(res_ob(jres)%I_mean*365.25)                              ! Update capacity ratio
+                else
+                    res_ob(jres)%c_ratio = 1.e6                                                           ! No inflow: storage based release only
+                end if
                 !! Verify if new operational year is starting
                 if (dom == 1) then                                                                        ! This update only occurs at the beginning of the month
                     if (I_mon<res_ob(jres)%I_mean) then
@@ -333,7 +345,7 @@
                 er = res_ob(jres)%S_ini/(alpha*smax)
 
                 !! Determine release target (Condition depends on wether the irrigation demand surpassess environmental flow requirements)
-                if (res_ob(jres)%d_mean >= beta*res_ob(jres)%I_mean) then
+                if (res_ob(jres)%d_mean > 1.e-6 .and. res_ob(jres)%d_mean >= beta*res_ob(jres)%I_mean) then     ! Jose T 2026: no division by a zero mean demand
                     target_rel = 0.10*res_ob(jres)%I_mean + 0.9*(d_mon/res_ob(jres)%d_mean)
 
                 else

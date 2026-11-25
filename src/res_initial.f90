@@ -50,6 +50,7 @@
         res_ob(ires)%N_memory             = 5                                                   !For now it will be fixed to 5
         allocate(res_ob(ires)%I_mon_past(12*res_ob(ires)%N_memory))
         res_ob(ires)%I_mon_past           = 0.0                                                 !At the beggining of the simulation this is a 1D array of N*12 zeros
+        res_ob(ires)%n_mem_mon            = 0                                                   !No month recorded yet (counts from the operational year, see yr_op)
         allocate(res_ob(ires)%daily_inflow_array(1))
         res_ob(ires)%daily_inflow_array   = 0.0                                                 !Same as above, 1d array with zeros
         res_ob(ires)%c_ratio              = 0.51
@@ -61,7 +62,6 @@
         allocate(res_ob(ires)%daily_demand_array(1))
         res_ob(ires)%daily_demand_array   = 0.0
         res_ob(ires)%d_irrig_day          = 0.0
-        res_ob(ires)%irrig_track          = 0
 
         !! use br1 as lag - then compute actual br1 (no option to input actual br1)
         res_ob(ires)%lag_up   = res_hyd(ires)%br1

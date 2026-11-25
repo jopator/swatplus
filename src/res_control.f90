@@ -63,7 +63,6 @@
       real    :: daily_inflow   = 0.                                          !m3         |Daily inflow from the past day
       real, dimension(:), allocatable :: temp_array                           !           |Temporary to store new values
       real :: daily_demand      = 0.                                          !m3         |Daily irrigation demand
-      integer :: irrig_track_b  = 0                                           !none       |Tracker to update daily irrigation demand
 
       ht1 = ob(icmd)%hin    !! set incoming flow
       ht2 = resz            !! zero outgoing flow, sediment and nutrients
@@ -92,14 +91,10 @@
         end_of_mo    = time%end_mo
         daily_inflow = ht1%flo
 
-        if (irrig_track_b == res_ob(jres)%irrig_track) then
-            daily_demand = 0
-
-        else
-            irrig_track_b = res_ob(jres)%irrig_track
-            daily_demand = res_ob(jres)%d_irrig_day
-
-        end if
+        !! irrigation demand of the day (sum over the hrus, actions.f90 res_irr_dmd), used once   |Jose T 2026
+        !! (replaces irrig_track_b, a saved variable shared by all reservoirs that repeated old demands every day)
+        daily_demand = res_ob(jres)%d_irrig_day
+        res_ob(jres)%d_irrig_day = 0.
 
         !! Store values in daily inflow array for the month and reset if month has ended
         if (dom == 1) then
@@ -142,6 +137,7 @@
             ! Shift rolling window to the left
             res_ob(jres)%I_mon_past(1:12*(res_ob(jres)%N_memory)-1)     = res_ob(jres)%I_mon_past(2:12*(res_ob(jres)%N_memory))
             res_ob(jres)%I_mon_past(12*(res_ob(jres)%N_memory))         = sum(res_ob(jres)%daily_inflow_array) / real(size(res_ob(jres)%daily_inflow_array), kind=8)
+            res_ob(jres)%n_mem_mon = min(res_ob(jres)%n_mem_mon + 1, 12*res_ob(jres)%N_memory)     ! months of memory since operational (mem_yrs condition)
 
             ! Do the same for irrigation
             res_ob(jres)%d_mon_past(1:12*(res_ob(jres)%N_memory)-1)     = res_ob(jres)%d_mon_past(2:12*(res_ob(jres)%N_memory))
@@ -358,6 +354,7 @@
         !! reservoir has not been constructed yet
         ob(icmd)%hd(1) = ob(icmd)%hin
         if (cs_db%num_tot > 0) obcs(icmd)%hd(1) = obcs(icmd)%hin(1)
+        res_ob(jres)%d_irrig_day = 0.                                                              ! no demand before yr_op
       end if
       
       !! if called from water allocation, set flag to indicate reservoir has been processed for the day
